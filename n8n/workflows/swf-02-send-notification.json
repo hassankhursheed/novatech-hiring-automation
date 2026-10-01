@@ -1,0 +1,429 @@
+{
+  "updatedAt": "2026-10-01T19:55:17.607Z",
+  "createdAt": "2026-10-01T19:55:17.607Z",
+  "id": "zNrGlzM4KLrFVMAo",
+  "name": "SWF-02 Send Notification",
+  "description": "Shared sub-workflow: sends a candidate/staff message at most once per dedupe key (ops.notifications), records SENT/FAILED/SKIPPED. Only place that knows the mail provider.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "074de9bf-1cad-4aab-88a1-2ed66293ec74",
+      "name": "When Called by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ctx",
+              "type": "object"
+            },
+            {
+              "name": "dedupe_key",
+              "type": "string"
+            },
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "template_key",
+              "type": "string"
+            },
+            {
+              "name": "recipient",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "type": "string"
+            },
+            {
+              "name": "html",
+              "type": "string"
+            },
+            {
+              "name": "application_id",
+              "type": "string"
+            },
+            {
+              "name": "entity_type",
+              "type": "string"
+            },
+            {
+              "name": "entity_id",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8fb2a282-7aef-4b77-a9c5-c24b54cae562",
+      "name": "Claim Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.begin_notification($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $json.dedupe_key, $json.channel || \"EMAIL\", $json.template_key, $json.recipient, $json.application_id || \"\", $json.entity_type || \"SYSTEM\", $json.entity_id || \"\", JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "4c7ebc29-7554-4bc7-89c0-55d999cb5b2e",
+      "name": "Not Sent Before?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.should_send }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "e4de9757-3e45-4d0f-a306-0113ec6cbda0",
+      "name": "Route by Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        200
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "email",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"When Called by Workflow\").item.json.channel || \"EMAIL\" }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "EMAIL"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Channel not configured"
+        }
+      }
+    },
+    {
+      "id": "9c9a9b9a-183e-4450-bdc7-bcdbc022d452",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        100
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "NovaTech Careers <careers@novatech.example>",
+        "toEmail": "={{ $(\"When Called by Workflow\").item.json.recipient }}",
+        "subject": "={{ $(\"When Called by Workflow\").item.json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $(\"When Called by Workflow\").item.json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "ntMailpitSmtp001",
+          "name": "Mailpit SMTP (dev)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "webhookId": "da7315b4-2500-4ae8-b461-4c97b678efc5"
+    },
+    {
+      "id": "0f2eb71b-2d73-459f-ae80-862751daf217",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1440,
+        40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_notification($1::uuid, 'SENT', $2, NULL, $3::jsonb) AS status",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Claim Notification\").item.json.notification_id, $json.messageId || \"\", JSON.stringify($(\"When Called by Workflow\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "883cdda5-ec53-4e3c-ba75-2febab33526e",
+      "name": "Mark Skipped",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1200,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_notification($1::uuid, 'SKIPPED', NULL, 'channel not configured', $2::jsonb) AS status",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Claim Notification\").item.json.notification_id, JSON.stringify($(\"When Called by Workflow\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "da7359f7-44a4-44aa-963b-1b497024661c",
+      "name": "Duplicate Suppressed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        960,
+        480
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "suppressed",
+              "name": "duplicate_suppressed",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "188df30c-f2a4-4748-b888-18c8f0cb3422",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1440,
+        200
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_notification($1::uuid, 'FAILED', NULL, $2, $3::jsonb) AS status",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Claim Notification\").item.json.notification_id, ($json.error?.message || $json.error || \"send failed\").toString(), JSON.stringify($(\"When Called by Workflow\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "ec4a2004-9c73-45f3-80bd-1fbe8e429339",
+      "name": "Sticky Note 48e4db1b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## SWF-02 Send Notification (at most once)\n`api.begin_notification` claims the dedupe key first. If a replay already sent this message, nothing is sent again.\nOnly this sub-workflow knows the provider: swap Mailpit/SMTP for Gmail, Outlook or SES per company without touching other workflows.",
+        "color": 4
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Workflow": {
+      "main": [
+        [
+          {
+            "node": "Claim Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Notification": {
+      "main": [
+        [
+          {
+            "node": "Not Sent Before?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not Sent Before?": {
+      "main": [
+        [
+          {
+            "node": "Route by Channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Duplicate Suppressed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Channel": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "a333b2c5-8f72-402b-9243-215f09a54a95",
+  "activeVersionId": "a333b2c5-8f72-402b-9243-215f09a54a95",
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T19:55:17.607Z",
+      "createdAt": "2026-10-01T19:55:17.607Z",
+      "role": "workflow:owner",
+      "workflowId": "zNrGlzM4KLrFVMAo",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Initial at-most-once notification sub-workflow",
+    "description": "Created with 10 nodes: When Called by Workflow, Claim Notification, Not Sent Before?, Route by Channel, Send Email and 5 more"
+  }
+}

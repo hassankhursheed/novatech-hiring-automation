@@ -1,0 +1,202 @@
+{
+  "updatedAt": "2026-10-01T19:53:40.534Z",
+  "createdAt": "2026-10-01T19:53:40.534Z",
+  "id": "IBNva3yYim0EcUCT",
+  "name": "SWF-03 Fail & Record Error",
+  "description": "Shared sub-workflow: records an unrecoverable failure in the dead/error queue (ops.automation_errors) and marks the calling execution FAILED.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "db807bc0-9aba-4a63-af4f-a1e42af83e8b",
+      "name": "When Called by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ctx",
+              "type": "object"
+            },
+            {
+              "name": "error",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b1897757-03ff-4eae-b355-0226f1068bd8",
+      "name": "Record Error in Queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.record_error($1::jsonb, $2::jsonb) AS error_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.error), JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "54834700-b0bb-4aff-82f3-e61bdf0786bd",
+      "name": "Mark Execution Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'FAILED', $2::uuid) AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"When Called by Workflow\").item.json.ctx), $json.error_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "e2c847f1-e2dc-4a92-be7e-2bc468cb3475",
+      "name": "Return Error Reference",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "err-id",
+              "name": "error_id",
+              "value": "={{ $(\"Record Error in Queue\").item.json.error_id }}",
+              "type": "string"
+            },
+            {
+              "id": "recorded",
+              "name": "recorded",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "547da8d0-4928-430e-b130-6a7b3066e43f",
+      "name": "Sticky Note ae7483a2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## SWF-03 Fail & Record Error\nCalled by any workflow on an unrecoverable failure.\n1. `api.record_error` stores the error with the original payload and replay target (deduplicated by fingerprint).\n2. `api.finish_workflow_execution` marks the caller execution FAILED.\nOperators see it in `reporting.v_error_queue` and replay it through WF-07.",
+        "color": 3
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Workflow": {
+      "main": [
+        [
+          {
+            "node": "Record Error in Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Error in Queue": {
+      "main": [
+        [
+          {
+            "node": "Mark Execution Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Execution Failed": {
+      "main": [
+        [
+          {
+            "node": "Return Error Reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "66c79362-d51a-4ee3-a1e4-505cecca8be2",
+  "activeVersionId": "66c79362-d51a-4ee3-a1e4-505cecca8be2",
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T19:53:40.534Z",
+      "createdAt": "2026-10-01T19:53:40.534Z",
+      "role": "workflow:owner",
+      "workflowId": "IBNva3yYim0EcUCT",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Initial error-queue sub-workflow",
+    "description": "Created with 5 nodes: When Called by Workflow, Record Error in Queue, Mark Execution Failed, Return Error Reference, Sticky Note ae7483a2"
+  }
+}

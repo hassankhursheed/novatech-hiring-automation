@@ -1,0 +1,1229 @@
+{
+  "updatedAt": "2026-10-01T20:10:56.563Z",
+  "createdAt": "2026-10-01T20:09:37.585Z",
+  "id": "ebKtDTWlruup0Nbg",
+  "name": "WF-03 Scoring & AI Review",
+  "description": "WF-03: screening for dispatcher action SCREEN_APPLICATION — re-checks state, data-driven rule score, advisory validated AI analysis (fallback on failure), policy decision; retryable failures back off via dispatcher, permanent ones go to the error queue.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "action",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "d80924af-5069-4ef8-bd67-04854199a69c",
+      "name": "When Called by Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ctx",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-03\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.action.correlation_id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "appid",
+              "name": "application_id",
+              "value": "={{ $json.action.application_id }}",
+              "type": "string"
+            },
+            {
+              "id": "action",
+              "name": "action",
+              "value": "={{ $json.action }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f3a7377b-6cdd-4c9f-9c8a-08f16346f83b",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        432,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', 'APPLICATION', $2) AS run_id, api.application_snapshot($2::uuid) AS app, coalesce((SELECT (value #>> '{}')::boolean FROM hiring.settings WHERE key = 'screening.ai_enabled'), true) AS ai_enabled, api.test_directive($3) AS fault_inject",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.application_id, $json.ctx.correlation_id ] }}"
+        }
+      },
+      "id": "f4798a6f-8b51-40a3-82ac-4b1d19d259be",
+      "name": "Start Log & Load State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        656,
+        528
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.app?.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "VALIDATED"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7aed6421-6c11-40e3-9c7b-29c3ef5675b8",
+      "name": "Still VALIDATED?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        880,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "method": "POST",
+            "path": "/v1/screening/score",
+            "body": "={{ ({ application_id: $(\"Build Context\").item.json.application_id }) }}",
+            "fault_inject": "={{ $(\"Start Log & Load State\").item.json.fault_inject }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $(\"Build Context\").item.json.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "1640b3c1-cb86-44a6-847f-80b136deb17f",
+      "name": "Rule Score (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1104,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f761fc50-3258-4e13-88ee-5aec65772d25",
+      "name": "Score Received?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1328,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.record_application_score($1::uuid, $2::jsonb, $3::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").item.json.application_id, JSON.stringify($json.body), JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+        }
+      },
+      "id": "f4903fa7-9dc6-4dd0-b3b1-e95d5e434593",
+      "name": "Record Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1552,
+        336
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $(\"Start Log & Load State\").item.json.ai_enabled }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0190401f-9faa-4882-819f-00614212f572",
+      "name": "AI Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1776,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "method": "POST",
+            "path": "/v1/screening/ai-analysis",
+            "body": "={{ ({ application_id: $(\"Build Context\").item.json.application_id }) }}",
+            "fault_inject": "={{ $(\"Start Log & Load State\").item.json.fault_inject }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $(\"Build Context\").item.json.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a968f7bd-d690-4749-92d2-1886a7110061",
+      "name": "AI Analysis (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "analysis",
+              "name": "analysis",
+              "value": "={{ $json.ok ? $json.body : { status: \"FALLBACK\", prompt_version: \"unavailable\", input_hash: \"unavailable:\" + $(\"Build Context\").item.json.application_id, attempts: 0, fallback_reason: ($json.error_code || \"AI_UNAVAILABLE\") + \": \" + ($json.error_message || \"AI analysis could not be obtained\") } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fde35e25-efea-423e-ab28-aafd2ae62e11",
+      "name": "Prepare AI Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2224,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.record_ai_analysis($1::uuid, $2::jsonb, $3::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").item.json.application_id, JSON.stringify($json.analysis), JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+        }
+      },
+      "id": "bca6e9d8-8bf1-467b-879a-5812959f1cb5",
+      "name": "Record AI Analysis",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2448,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "method": "POST",
+            "path": "/v1/screening/decide",
+            "body": "={{ ({ score: { route: $(\"Record Score\").item.json.route, score: Number($(\"Record Score\").item.json.score) }, ai: $(\"Prepare AI Result\").isExecuted ? { status: $(\"Prepare AI Result\").item.json.analysis.status, recommendation: $(\"Prepare AI Result\").item.json.analysis.analysis?.recommendation ?? null, fallback_reason: $(\"Prepare AI Result\").item.json.analysis.fallback_reason ?? null } : null }) }}",
+            "fault_inject": "={{ $(\"Start Log & Load State\").item.json.fault_inject }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $(\"Build Context\").item.json.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f0130d6e-e7f7-4650-a8b5-12b81a02b952",
+      "name": "Screening Decision (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2672,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.error_code }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NO_ACTIVE_RULES"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "no active rules"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.error_class }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "RETRYABLE"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "retryable"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "permanent"
+        }
+      },
+      "id": "2acf73f2-75b8-4417-939b-35955dec89e9",
+      "name": "Why Did Scoring Fail?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3120,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.transition_application_status($1::uuid, 'SCREENING_REVIEW', 'automatic scoring impossible: no active scoring rules for this position', $2::jsonb, 'VALIDATED')",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").item.json.application_id, JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+        }
+      },
+      "id": "ce1d0ca0-3d94-48cd-a8a1-a1a7d64c538e",
+      "name": "Route to Screening Review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3344,
+        1104
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SUCCEEDED') AS duration_ms, 'DONE' AS action_outcome, $2 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").item.json.ctx), \"screening complete: \" + ($json.to_status || \"routed to review\") ] }}"
+        }
+      },
+      "id": "07348c17-19b8-41e9-8659-7bf381bcc61d",
+      "name": "Finish: Done",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3568,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'FAILED') AS duration_ms, 'FAILED' AS action_outcome, $2 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").item.json.ctx), ($json.error_code || \"RETRYABLE\") + \": \" + ($json.error_message || \"backend unavailable\") ] }}"
+        }
+      },
+      "id": "82861a56-909b-40c4-89c3-b0a78f2f8eae",
+      "name": "Finish: Retry Later",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3344,
+        768
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "error": "={{ (() => { const pg = $json.error !== undefined; const msg = pg ? String($json.error?.message ?? $json.error) : String($json.error_message || \"screening step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-03\", node_name: $prevNode.name, error_class: pg ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: pg ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"SCREENING_FAILED\"), error_message: msg, http_status: pg ? null : ($json.status || null), retry_count: pg ? 0 : ($json.attempts || 0), entity_type: \"APPLICATION\", entity_id: $(\"Build Context\").item.json.application_id, replay_workflow: \"WF-03\", payload: { action: $(\"Build Context\").item.json.action } }; })() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "64820fdf-492b-48f3-b5d2-a4a467e7338a",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3344,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SKIPPED') AS duration_ms, 'SKIPPED' AS action_outcome, $2 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").item.json.ctx), \"application is \" + ($json.app?.status || \"missing\") + \"; screening no longer applies\" ] }}"
+        }
+      },
+      "id": "29bb5afa-2ea7-4e42-9ccc-cccaa01e410e",
+      "name": "Finish: Skipped",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1104,
+        624
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7a800968-1bb4-4705-98ff-3b2465c5cc22",
+      "name": "Decision Received?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2896,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.apply_screening_decision($1::uuid, $2::jsonb, $3::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").item.json.application_id, JSON.stringify($json.body), JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+        }
+      },
+      "id": "5f8d86fe-7aa3-47bf-bc63-bc362d14d8ec",
+      "name": "Apply Screening Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3120,
+        112
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error_class }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "RETRYABLE"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "70c3ec6e-c359-414f-922e-6b391ff89a48",
+      "name": "Decision Failure Retryable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "action_outcome",
+              "value": "DONE",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "action_reason",
+              "value": "={{ \"permanent failure moved to error queue (\" + $json.error_id + \")\" }}",
+              "type": "string"
+            },
+            {
+              "id": "errid",
+              "name": "error_id",
+              "value": "={{ $json.error_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa1cf2ad-22f3-4ce7-87d6-2c2855f5caa7",
+      "name": "Return: Moved to Error Queue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3568,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## WF-03 Scoring & AI Review (action SCREEN_APPLICATION)\n1. Re-check state: it continues only if the application is still VALIDATED.\n2. Rule score: the backend reads the scoring rules from the DB (data-driven), then `api.record_application_score` moves it to SCORED.\n3. Advisory AI: an output that is validated, or a FALLBACK when AI is unavailable or malformed. Stored with `api.record_ai_analysis`.\n4. Decision policy: the rules decide, and AI can only add a human review. `api.apply_screening_decision` moves it to SHORTLISTED / SCREENING_REVIEW / REJECTED.\nRetryable failures return FAILED so the dispatcher retries with backoff. Permanent failures go to the error queue (replay WF-03).",
+        "color": 2
+      },
+      "id": "f27a8548-eaf3-4fd5-a7b7-72ed990d5cda",
+      "name": "Sticky Note 6f7f8e20",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        112,
+        304
+      ]
+    }
+  ],
+  "connections": {
+    "When Called by Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Start Log & Load State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Log & Load State": {
+      "main": [
+        [
+          {
+            "node": "Still VALIDATED?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still VALIDATED?": {
+      "main": [
+        [
+          {
+            "node": "Rule Score (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish: Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rule Score (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Score Received?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Received?": {
+      "main": [
+        [
+          {
+            "node": "Record Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Why Did Scoring Fail?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Score": {
+      "main": [
+        [
+          {
+            "node": "AI Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Enabled?": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Screening Decision (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Result": {
+      "main": [
+        [
+          {
+            "node": "Record AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Screening Decision (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screening Decision (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Decision Received?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Why Did Scoring Fail?": {
+      "main": [
+        [
+          {
+            "node": "Route to Screening Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish: Retry Later",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Screening Review": {
+      "main": [
+        [
+          {
+            "node": "Finish: Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failure (SWF-03)": {
+      "main": [
+        [
+          {
+            "node": "Return: Moved to Error Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Received?": {
+      "main": [
+        [
+          {
+            "node": "Apply Screening Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Decision Failure Retryable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Screening Decision": {
+      "main": [
+        [
+          {
+            "node": "Finish: Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Failure Retryable?": {
+      "main": [
+        [
+          {
+            "node": "Finish: Retry Later",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "509bc5c4-18f8-4736-9406-91cb3d02daaa",
+  "activeVersionId": "509bc5c4-18f8-4736-9406-91cb3d02daaa",
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T20:09:37.585Z",
+      "createdAt": "2026-10-01T20:09:37.585Z",
+      "role": "workflow:owner",
+      "workflowId": "ebKtDTWlruup0Nbg",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

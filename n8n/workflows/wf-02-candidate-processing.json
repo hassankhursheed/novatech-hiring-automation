@@ -1,0 +1,1004 @@
+{
+  "updatedAt": "2026-10-01T20:02:35.586Z",
+  "createdAt": "2026-10-01T20:02:35.586Z",
+  "id": "76ahG9hzRP7cuQL4",
+  "name": "WF-02 Candidate Processing",
+  "description": "WF-02: persists a validated submission (candidate upsert, duplicate detection, application + state machine) and sends one acknowledgement per event; also sends rejection notices for the dispatcher after re-checking state.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "8bb81777-45da-4b14-9ece-98a2ab2f8534",
+      "name": "When Called by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        400
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "mode",
+              "type": "string"
+            },
+            {
+              "name": "event_id",
+              "type": "string"
+            },
+            {
+              "name": "correlation_id",
+              "type": "string"
+            },
+            {
+              "name": "validation",
+              "type": "object"
+            },
+            {
+              "name": "action",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9fe2ffe3-ab4f-49cb-8a47-b2d3b317362f",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        420,
+        400
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ctx",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-02\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.correlation_id || $json.action?.correlation_id || null }) }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "18f77a6f-1c0e-4245-9045-479a0cdb6fdc",
+      "name": "Intake or Action?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        400
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "intake",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "intake"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "rejection notice",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action?.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "SEND_REJECTION_NOTICE"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0810e762-27bb-496f-a2c6-acd0ad7aca55",
+      "name": "Start Execution Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        860,
+        240
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', 'EVENT', $2) AS run_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.event_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "c1ccef7f-cf93-45fb-bb40-911afb497345",
+      "name": "Persist Application",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1080,
+        240
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.submit_application($1::uuid, $2::jsonb, $3::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").item.json.event_id, JSON.stringify($(\"Build Context\").item.json.validation), JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "0fe38e66-df97-4c0a-be29-9e1bb63589a4",
+      "name": "Compose Candidate Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1300,
+        160
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "recipient",
+              "name": "recipient",
+              "value": "={{ $(\"Build Context\").item.json.validation?.application?.email || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "template",
+              "name": "template_key",
+              "value": "={{ ({ ACCEPTED: \"application.received\", NEEDS_REVIEW: \"application.received\", DUPLICATE: \"application.duplicate\", INVALID: \"application.invalid\" })[$json.outcome] || \"application.received\" }}",
+              "type": "string"
+            },
+            {
+              "id": "dedupe",
+              "name": "dedupe_key",
+              "value": "={{ \"candidate.ack:\" + $(\"Build Context\").item.json.event_id }}",
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "name": "subject",
+              "value": "={{ (() => { const p = $(\"Build Context\").item.json.validation?.application?.position_title || \"your application\"; const o = $json.outcome; if (o === \"DUPLICATE\") return \"We already have your application for \" + p; if (o === \"INVALID\") return \"We could not process your application\"; return \"We received your application for \" + p; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "name": "html",
+              "value": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"]/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", \"\\\"\": \"&quot;\" })[c]); const a = $(\"Build Context\").item.json.validation?.application || {}; const name = esc(a.full_name || \"Applicant\"); const pos = esc(a.position_title || \"the position\"); const code = esc($json.application_code || \"\"); const o = $json.outcome; let body; if (o === \"DUPLICATE\") { body = \"<p>We already have an active application from you for <b>\" + pos + \"</b> (reference \" + code + \"). There is no need to apply again; we will update you on the existing application.</p>\"; } else if (o === \"INVALID\") { body = \"<p>Unfortunately we could not process your application: \" + esc($json.reason || \"some required information was missing\") + \".</p><p>Please submit the form again with the missing details.</p>\"; } else { body = \"<p>Thank you for applying for <b>\" + pos + \"</b> at NovaTech Solutions. Your reference number is <b>\" + code + \"</b>.</p><p>Our team will review your application and contact you about the next steps.</p>\"; } return \"<p>Dear \" + name + \",</p>\" + body + \"<p>Kind regards,<br/>NovaTech Talent Team</p>\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "appid",
+              "name": "application_id",
+              "value": "={{ $json.application_id || \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "135d88c9-d7d2-4459-b0e9-dc4ccc41c548",
+      "name": "Has Valid Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1520,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.recipient }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c01a5a62-9415-4e6a-9ccf-fd4b7dec3fad",
+      "name": "Send Acknowledgement (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1740,
+        80
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "dedupe_key": "={{ $json.dedupe_key }}",
+            "channel": "EMAIL",
+            "template_key": "={{ $json.template_key }}",
+            "recipient": "={{ $json.recipient }}",
+            "subject": "={{ $json.subject }}",
+            "html": "={{ $json.html }}",
+            "application_id": "={{ $json.application_id }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $json.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "3aa4699e-e963-4beb-a879-adb723ab3a03",
+      "name": "Finish Execution Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1960,
+        160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SUCCEEDED') AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "23e5f642-71e9-4998-a56b-c6eb3a546dd0",
+      "name": "Load Application State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        860,
+        600
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.application_snapshot($1::uuid) AS app",
+        "options": {
+          "queryReplacement": "={{ [ $json.action.application_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "fd92dd09-e6aa-4f4f-860a-a7addad5bad3",
+      "name": "Still Rejected With Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1080,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.app?.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "REJECTED"
+            },
+            {
+              "leftValue": "={{ $json.app?.candidate?.email || \"\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8e4a4bf8-fa94-45ed-b50e-4bfb8cd62df3",
+      "name": "Send Rejection Notice (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1300,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "dedupe_key": "={{ \"candidate.rejection:\" + $json.app.application_id }}",
+            "channel": "EMAIL",
+            "template_key": "application.rejected",
+            "recipient": "={{ $json.app.candidate.email }}",
+            "subject": "={{ \"Your application for \" + $json.app.position.title + \" at NovaTech Solutions\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"]/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", \"\\\"\": \"&quot;\" })[c]); return \"<p>Dear \" + esc($json.app.candidate.full_name) + \",</p><p>Thank you for your interest in the <b>\" + esc($json.app.position.title) + \"</b> role (reference \" + esc($json.app.application_code) + \").</p><p>After careful review we have decided not to move forward with your application at this time. We will keep your details on file and encourage you to apply for future openings.</p><p>Kind regards,<br/>NovaTech Talent Team</p>\"; })() }}",
+            "application_id": "={{ $json.app.application_id }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $json.app.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "f6d504db-d1d8-48b8-aa0b-7d98ebe8bf55",
+      "name": "Return Action Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1520,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "action_outcome",
+              "value": "={{ $json.status === \"FAILED\" ? \"FAILED\" : \"DONE\" }}",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "action_reason",
+              "value": "={{ $json.status === \"FAILED\" ? \"rejection notice could not be sent\" : ($json.duplicate_suppressed ? \"already sent\" : \"rejection notice sent\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d2ef3243-b606-4e8b-9d50-bdaff43cc77d",
+      "name": "Skip: State Changed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1300,
+        700
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "action_outcome",
+              "value": "SKIPPED",
+              "type": "string"
+            },
+            {
+              "id": "reason",
+              "name": "action_reason",
+              "value": "={{ \"application is \" + ($json.app?.status || \"missing\") + \" or has no email\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dd26ce6c-b4ad-4375-8f48-b0caf48e6764",
+      "name": "Return Intake Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2180,
+        160
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "={{ $(\"Persist Application\").item.json.outcome }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $(\"Persist Application\").item.json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "appid",
+              "name": "application_id",
+              "value": "={{ $(\"Persist Application\").item.json.application_id }}",
+              "type": "string"
+            },
+            {
+              "id": "appcode",
+              "name": "application_code",
+              "value": "={{ $(\"Persist Application\").item.json.application_code }}",
+              "type": "string"
+            },
+            {
+              "id": "corr",
+              "name": "correlation_id",
+              "value": "={{ $(\"Persist Application\").item.json.correlation_id }}",
+              "type": "string"
+            },
+            {
+              "id": "replayed",
+              "name": "replayed",
+              "value": "={{ $(\"Persist Application\").item.json.replayed }}",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2c7bcdcd-2c94-44bf-b895-b9c16e21932d",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1300,
+        360
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "error": "={{ (() => { const msg = String($json.error?.message ?? $json.error ?? \"persist failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-02\", node_name: \"Persist Application\", error_class: m ? \"NON_RETRYABLE\" : \"UNKNOWN\", error_code: m ? m[1] : \"DB_ERROR\", error_message: msg, entity_type: \"EVENT\", entity_id: $(\"Build Context\").item.json.event_id, replay_workflow: \"WF-02\", payload: { mode: \"intake\", event_id: $(\"Build Context\").item.json.event_id, correlation_id: $(\"Build Context\").item.json.correlation_id, validation: $(\"Build Context\").item.json.validation } }; })() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "fca71ed9-7c2d-4fea-b252-4d5d2214ccb7",
+      "name": "Sticky Note 2eb35c0c",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## WF-02 Candidate Processing\n**Intake** (called by WF-01): `api.submit_application` runs one transaction that upserts the candidate, detects duplicates and creates the application (NEW -> VALIDATING -> VALIDATED / SCREENING_REVIEW). A replayed event returns its stored result. It then sends exactly one acknowledgement per event (SWF-02 dedupe key).\n**Action SEND_REJECTION_NOTICE** (called by WF-00): re-checks that the application is still REJECTED before emailing.\nFailures go to SWF-03 with replay target WF-02.",
+        "color": 6
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Workflow": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Intake or Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intake or Action?": {
+      "main": [
+        [
+          {
+            "node": "Start Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Application State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Execution Log": {
+      "main": [
+        [
+          {
+            "node": "Persist Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Application": {
+      "main": [
+        [
+          {
+            "node": "Compose Candidate Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Candidate Message": {
+      "main": [
+        [
+          {
+            "node": "Has Valid Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Email?": {
+      "main": [
+        [
+          {
+            "node": "Send Acknowledgement (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Acknowledgement (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Finish Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish Execution Log": {
+      "main": [
+        [
+          {
+            "node": "Return Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Application State": {
+      "main": [
+        [
+          {
+            "node": "Still Rejected With Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still Rejected With Email?": {
+      "main": [
+        [
+          {
+            "node": "Send Rejection Notice (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: State Changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Rejection Notice (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Return Action Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "d663161e-fc44-4e68-a3c4-f3f1d3173807",
+  "activeVersionId": "d663161e-fc44-4e68-a3c4-f3f1d3173807",
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T20:02:35.586Z",
+      "createdAt": "2026-10-01T20:02:35.586Z",
+      "role": "workflow:owner",
+      "workflowId": "76ahG9hzRP7cuQL4",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Initial candidate processing",
+    "description": "Created with 17 nodes: When Called by Workflow, Build Context, Intake or Action?, Start Execution Log, Persist Application and 12 more"
+  }
+}

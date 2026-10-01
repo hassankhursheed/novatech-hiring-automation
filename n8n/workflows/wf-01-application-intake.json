@@ -1,0 +1,880 @@
+{
+  "updatedAt": "2026-10-01T20:07:26.748Z",
+  "createdAt": "2026-10-01T20:04:39.236Z",
+  "id": "5ffc9mQNtFMFyUwW",
+  "name": "WF-01 Application Intake",
+  "description": "WF-01: public intake webhook. Requires Idempotency-Key, stores the raw event first, answers replays from stored results, responds 202, validates via backend (SWF-01) and persists via WF-02; failures go to the error queue.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "dfb66f90-ed94-4974-92c6-fe1f2576a179",
+      "name": "Application Submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "applications",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://localhost:5173"
+        }
+      },
+      "webhookId": "3c5946ea-6f2d-42f4-97f7-94257fcf4084"
+    },
+    {
+      "id": "2caeaad7-6efd-47e1-aaa3-d9d0a1d49480",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        420,
+        400
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "source",
+              "name": "source",
+              "value": "WEB_FORM",
+              "type": "string"
+            },
+            {
+              "id": "key",
+              "name": "idempotency_key",
+              "value": "={{ String($json.headers?.[\"idempotency-key\"] ?? $json.body?.idempotency_key ?? \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ $json.body ?? {} }}",
+              "type": "object"
+            },
+            {
+              "id": "fault",
+              "name": "fault_inject",
+              "value": "={{ $json.headers?.[\"x-fault-inject\"] ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "ctx",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-01\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e9d88025-ece9-4c97-9bb4-4e67a3c30515",
+      "name": "Has Idempotency Key?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.idempotency_key.length }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "rightValue": 8
+            },
+            {
+              "leftValue": "={{ $json.idempotency_key.length }}",
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              },
+              "rightValue": 200
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "53cdf670-ac16-4c5a-9046-2978da1cd219",
+      "name": "Register Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.register_event($1, $2, 'APPLICATION_SUBMITTED', $3::jsonb, $4::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $json.source, $json.idempotency_key, JSON.stringify($json.body), JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "fd8a5dbe-0eab-47fd-b779-8028cc2ceba2",
+      "name": "Attach Correlation Id",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ctx",
+              "name": "ctx",
+              "value": "={{ ({ ...$(\"Normalize Request\").item.json.ctx, correlation_id: $json.correlation_id }) }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d673934d-4cb9-45fa-a857-e14dc21be32a",
+      "name": "Start Execution Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'WEBHOOK', 'EVENT', $2) AS run_id, CASE WHEN $3 <> '' THEN api.set_test_directive($4, $3, $1::jsonb) END AS test_directive_stored",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.event_id, $(\"Normalize Request\").item.json.fault_inject || \"\", $json.correlation_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "f32df202-0fdf-4d82-b764-a9d0b897de3b",
+      "name": "Already Processed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1520,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $(\"Attach Correlation Id\").item.json.is_replay }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            },
+            {
+              "leftValue": "={{ $(\"Attach Correlation Id\").item.json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "COMPLETED"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "badb8542-bd4f-498b-a71e-0f86ad4d9a16",
+      "name": "Respond 200 Already Processed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1740,
+        160
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"already_processed\", correlation_id: $(\"Attach Correlation Id\").item.json.correlation_id, outcome: $(\"Attach Correlation Id\").item.json.outcome, result: $(\"Attach Correlation Id\").item.json.result }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "X-Correlation-ID",
+                "value": "={{ $(\"Attach Correlation Id\").item.json.correlation_id }}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "e4cd84b0-c484-415a-9eb3-1184b84e8d8c",
+      "name": "Finish as Skipped",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1960,
+        160
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SKIPPED') AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Attach Correlation Id\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "5650f0c5-d2a9-469b-a6d0-7a5bef2a34ab",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1740,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"accepted\", correlation_id: $(\"Attach Correlation Id\").item.json.correlation_id, message: \"Application received. You will get a confirmation email shortly.\" }) }}",
+        "options": {
+          "responseCode": 202,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "X-Correlation-ID",
+                "value": "={{ $(\"Attach Correlation Id\").item.json.correlation_id }}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "164c607b-2a05-442e-9839-e62cb8507e7d",
+      "name": "Validate & Normalize (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1960,
+        400
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Attach Correlation Id\").item.json.ctx }}",
+            "method": "POST",
+            "path": "/v1/intake/validate",
+            "body": "={{ $(\"Normalize Request\").item.json.body }}",
+            "fault_inject": "={{ $(\"Normalize Request\").item.json.fault_inject }}",
+            "entity_type": "EVENT",
+            "entity_id": "={{ $(\"Attach Correlation Id\").item.json.event_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "5ce20305-c6bb-4903-a647-6c93fa40c7fc",
+      "name": "Validation Call Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2180,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "090a4889-de0e-431c-94fc-3774104bb67b",
+      "name": "Persist Candidate (WF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "76ahG9hzRP7cuQL4",
+          "cachedResultName": "WF-02 Candidate Processing"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "mode": "intake",
+            "event_id": "={{ $(\"Attach Correlation Id\").item.json.event_id }}",
+            "correlation_id": "={{ $(\"Attach Correlation Id\").item.json.correlation_id }}",
+            "validation": "={{ $json.body }}",
+            "action": "={{ ({}) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "event_id",
+              "displayName": "event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "correlation_id",
+              "displayName": "correlation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "validation",
+              "displayName": "validation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "c75e8ea5-f51a-4d88-8753-f676fd2331cc",
+      "name": "Finish Execution Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2620,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2, NULLIF($3, '')::uuid) AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Attach Correlation Id\").item.json.ctx), $json.error_id ? \"FAILED\" : \"SUCCEEDED\", $json.error_id || \"\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "ffeff8ae-d315-422f-87bd-4207cba75f83",
+      "name": "Mark Event Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2400,
+        500
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.fail_event($1::uuid, $2, $3::jsonb) AS event_status",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Attach Correlation Id\").item.json.event_id, ($json.error_code || \"VALIDATION_UNAVAILABLE\") + \": \" + ($json.error_message || \"validation service failed\"), JSON.stringify($(\"Attach Correlation Id\").item.json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "520f8c64-364c-475b-b768-5e16d31d5322",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2620,
+        500
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Attach Correlation Id\").item.json.ctx }}",
+            "error": "={{ ({ workflow_name: \"WF-01\", node_name: \"Validate & Normalize (SWF-01)\", error_class: $(\"Validate & Normalize (SWF-01)\").item.json.error_class || \"UNKNOWN\", error_code: $(\"Validate & Normalize (SWF-01)\").item.json.error_code || \"VALIDATION_FAILED\", error_message: $(\"Validate & Normalize (SWF-01)\").item.json.error_message || \"validation call failed\", http_status: $(\"Validate & Normalize (SWF-01)\").item.json.status || null, retry_count: $(\"Validate & Normalize (SWF-01)\").item.json.attempts || 0, entity_type: \"EVENT\", entity_id: $(\"Attach Correlation Id\").item.json.event_id, replay_workflow: \"WF-01\", payload: { source: $(\"Normalize Request\").item.json.source, idempotency_key: $(\"Normalize Request\").item.json.idempotency_key, body: $(\"Normalize Request\").item.json.body } }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "1c4f0e03-4dba-4db3-8019-2e55c189fd29",
+      "name": "Respond 400 Missing Key",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        860,
+        560
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"code\": \"IDEMPOTENCY_KEY_REQUIRED\", \"detail\": \"Send a unique Idempotency-Key header (8-200 characters) and reuse it when retrying the same submission.\", \"retryable\": false }",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "c3759e68-f0a7-4b50-a0cf-c048d693b3d7",
+      "name": "Respond 409/503 Not Registered",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1080,
+        460
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify(String($json.error?.message ?? $json.error ?? \"\").includes(\"IDEMPOTENCY_KEY_REUSED\") ? { code: \"IDEMPOTENCY_KEY_REUSED\", detail: \"This Idempotency-Key was already used with a different payload.\", retryable: false } : { code: \"TEMPORARILY_UNAVAILABLE\", detail: \"The application could not be stored. Please retry with the same Idempotency-Key.\", retryable: true }) }}",
+        "options": {
+          "responseCode": "={{ String($json.error?.message ?? $json.error ?? \"\").includes(\"IDEMPOTENCY_KEY_REUSED\") ? 409 : 503 }}"
+        }
+      }
+    },
+    {
+      "id": "da5774d5-8517-4e2f-ac7b-823780416365",
+      "name": "Sticky Note ee850fea",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## WF-01 Application Intake (public webhook)\n`POST /webhook/applications` requires an **Idempotency-Key** header.\n1. `api.register_event` stores the raw payload before anything else, so nothing is silently dropped and a correlation id is assigned.\n2. A replay of a completed event returns 200 with the original result and creates nothing.\n3. Otherwise it replies **202** immediately, then validates through SWF-01 (retries) and persists through WF-02.\n4. If validation fails after retries, the event is marked FAILED and goes to the error queue. A replay redelivers the same key and body.\n`X-Fault-Inject` (dev only) is passed to the backend for failure demos.",
+        "color": 7
+      }
+    }
+  ],
+  "connections": {
+    "Application Submitted": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Has Idempotency Key?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Idempotency Key?": {
+      "main": [
+        [
+          {
+            "node": "Register Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400 Missing Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Event": {
+      "main": [
+        [
+          {
+            "node": "Attach Correlation Id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 409/503 Not Registered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Correlation Id": {
+      "main": [
+        [
+          {
+            "node": "Start Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Execution Log": {
+      "main": [
+        [
+          {
+            "node": "Already Processed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Processed?": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 Already Processed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 202 Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200 Already Processed": {
+      "main": [
+        [
+          {
+            "node": "Finish as Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 202 Accepted": {
+      "main": [
+        [
+          {
+            "node": "Validate & Normalize (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Normalize (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Validation Call Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Call Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Persist Candidate (WF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Event Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Candidate (WF-02)": {
+      "main": [
+        [
+          {
+            "node": "Finish Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Event Failed": {
+      "main": [
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "88b4241a-bdbd-4dc4-9c19-d53c2360654f",
+  "activeVersionId": "88b4241a-bdbd-4dc4-9c19-d53c2360654f",
+  "versionCounter": 2,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T20:04:39.236Z",
+      "createdAt": "2026-10-01T20:04:39.236Z",
+      "role": "workflow:owner",
+      "workflowId": "5ffc9mQNtFMFyUwW",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Persist dev fault directive with the correlation id",
+    "description": "Updated nodes: Start Execution Log"
+  }
+}

@@ -1,0 +1,1199 @@
+{
+  "updatedAt": "2026-10-01T20:06:19.524Z",
+  "createdAt": "2026-10-01T19:59:21.036Z",
+  "id": "aIsZuTp9Z6s1IqLi",
+  "name": "SWF-01 Backend Call",
+  "description": "Shared sub-workflow: calls the FastAPI backend with classified retries (retryable flag/429/5xx/network) and exponential backoff, logs RETRY_ATTEMPT/RETRY_RECOVERED; never throws.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ctx",
+              "type": "object"
+            },
+            {
+              "name": "method"
+            },
+            {
+              "name": "path"
+            },
+            {
+              "name": "body",
+              "type": "object"
+            },
+            {
+              "name": "fault_inject"
+            },
+            {
+              "name": "entity_type"
+            },
+            {
+              "name": "entity_id"
+            }
+          ]
+        }
+      },
+      "id": "ec42dd8d-ceca-4355-93b5-e2a87796571f",
+      "name": "When Called by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ctx",
+              "name": "ctx",
+              "value": "={{ $json.ctx }}",
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "name": "method",
+              "value": "={{ ($json.method || \"POST\").toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "name": "path",
+              "value": "={{ $json.path }}",
+              "type": "string"
+            },
+            {
+              "id": "url",
+              "name": "url",
+              "value": "={{ \"http://backend:8000\" + $json.path }}",
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ $json.body ?? {} }}",
+              "type": "object"
+            },
+            {
+              "id": "fault",
+              "name": "fault_inject",
+              "value": "={{ $json.fault_inject || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "corr",
+              "name": "correlation_id",
+              "value": "={{ $json.ctx?.correlation_id || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "etype",
+              "name": "entity_type",
+              "value": "={{ $json.entity_type || \"SYSTEM\" }}",
+              "type": "string"
+            },
+            {
+              "id": "eid",
+              "name": "entity_id",
+              "value": "={{ $json.entity_id || \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8384d96b-905b-4d2a-bb84-8371fd400bdd",
+      "name": "Prepare Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        432,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "={{ $(\"Prepare Request\").item.json.method }}",
+        "url": "={{ $(\"Prepare Request\").item.json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{ $(\"Prepare Request\").item.json.correlation_id }}"
+            },
+            {
+              "name": "X-Attempt",
+              "value": "1"
+            },
+            {
+              "name": "X-Fault-Inject",
+              "value": "={{ $(\"Prepare Request\").item.json.fault_inject }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Prepare Request\").item.json.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "id": "ec88ffcf-4824-4e84-97e5-2a3a2505d04e",
+      "name": "Call Backend (Attempt 1)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        656,
+        480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "={{ (() => { const s = $json.statusCode; if (!s) return \"retry\"; if (s >= 200 && s < 300) return \"success\"; const r = $json.body?.retryable; if (typeof r === \"boolean\") return r ? \"retry\" : \"fail\"; return (s === 429 || s === 408 || s >= 500) ? \"retry\" : \"fail\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": "={{ ($json.statusCode ?? 0) >= 200 && ($json.statusCode ?? 0) < 300 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $json.statusCode ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ (typeof $json.body === \"object\" && $json.body !== null) ? $json.body : { raw: $json.body ?? null } }}",
+              "type": "object"
+            },
+            {
+              "id": "attempts",
+              "name": "attempts",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "eclass",
+              "name": "error_class",
+              "value": "={{ (() => { const s = $json.statusCode; if (s >= 200 && s < 300) return \"\"; if (!s) return \"RETRYABLE\"; const r = $json.body?.retryable; if (typeof r === \"boolean\") return r ? \"RETRYABLE\" : \"NON_RETRYABLE\"; return (s === 429 || s === 408 || s >= 500) ? \"RETRYABLE\" : \"NON_RETRYABLE\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "ecode",
+              "name": "error_code",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : ($json.body?.code ?? ($json.statusCode ? \"HTTP_\" + $json.statusCode : \"NETWORK_ERROR\")) }}",
+              "type": "string"
+            },
+            {
+              "id": "emsg",
+              "name": "error_message",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.error?.message ?? $json.error ?? $json.statusMessage ?? \"request failed\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c11b923f-48b9-45a9-a2f4-684de589d54f",
+      "name": "Classify Attempt 1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        880,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "success"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "success"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "retry"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "retry"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "permanent failure"
+        }
+      },
+      "id": "07ad8467-0908-4b4b-a041-60b0a921218b",
+      "name": "Route Attempt 1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1104,
+        464
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "631ae1f0-56e5-49f1-95c6-ef6d81ff32ec",
+      "name": "Succeeded First Time",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.log_action($1::jsonb, $2, $3, 'RETRY_ATTEMPT', 'FAILURE', $4::jsonb, $5, $6) AS log_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify({ ...$(\"Prepare Request\").item.json.ctx, retry_count: 1 }), $(\"Prepare Request\").item.json.entity_type, $(\"Prepare Request\").item.json.entity_id, JSON.stringify({ attempt: 1, path: $(\"Prepare Request\").item.json.path, status: $json.status }), $json.error_code, $json.error_message ] }}"
+        }
+      },
+      "id": "38ded0c9-9e33-417a-ad9c-677faaf99d66",
+      "name": "Log Retry 1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1328,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "03a3d957-30f1-46ce-aeea-f48ee569751b",
+      "name": "Back Off 2s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1552,
+        480
+      ],
+      "webhookId": "979dbd79-dffc-40c5-a839-6362e2421294"
+    },
+    {
+      "parameters": {
+        "method": "={{ $(\"Prepare Request\").item.json.method }}",
+        "url": "={{ $(\"Prepare Request\").item.json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{ $(\"Prepare Request\").item.json.correlation_id }}"
+            },
+            {
+              "name": "X-Attempt",
+              "value": "2"
+            },
+            {
+              "name": "X-Fault-Inject",
+              "value": "={{ $(\"Prepare Request\").item.json.fault_inject }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Prepare Request\").item.json.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "id": "7af2cc84-64f8-460f-a731-c709adb1874c",
+      "name": "Call Backend (Attempt 2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1776,
+        480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "={{ (() => { const s = $json.statusCode; if (!s) return \"retry\"; if (s >= 200 && s < 300) return \"success\"; const r = $json.body?.retryable; if (typeof r === \"boolean\") return r ? \"retry\" : \"fail\"; return (s === 429 || s === 408 || s >= 500) ? \"retry\" : \"fail\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": "={{ ($json.statusCode ?? 0) >= 200 && ($json.statusCode ?? 0) < 300 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $json.statusCode ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ (typeof $json.body === \"object\" && $json.body !== null) ? $json.body : { raw: $json.body ?? null } }}",
+              "type": "object"
+            },
+            {
+              "id": "attempts",
+              "name": "attempts",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "eclass",
+              "name": "error_class",
+              "value": "={{ (() => { const s = $json.statusCode; if (s >= 200 && s < 300) return \"\"; if (!s) return \"RETRYABLE\"; const r = $json.body?.retryable; if (typeof r === \"boolean\") return r ? \"RETRYABLE\" : \"NON_RETRYABLE\"; return (s === 429 || s === 408 || s >= 500) ? \"RETRYABLE\" : \"NON_RETRYABLE\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "ecode",
+              "name": "error_code",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : ($json.body?.code ?? ($json.statusCode ? \"HTTP_\" + $json.statusCode : \"NETWORK_ERROR\")) }}",
+              "type": "string"
+            },
+            {
+              "id": "emsg",
+              "name": "error_message",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.error?.message ?? $json.error ?? $json.statusMessage ?? \"request failed\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ecf7c2b8-d55e-43da-88fe-e5d9f92573fb",
+      "name": "Classify Attempt 2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2000,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "success"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "success"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "retry"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "retry"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "permanent failure"
+        }
+      },
+      "id": "8a419e66-6c70-45b0-b6e5-8cfbca3b6f9e",
+      "name": "Route Attempt 2",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2224,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.log_action($1::jsonb, $2, $3, 'RETRY_RECOVERED', 'SUCCESS', $4::jsonb) AS log_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify({ ...$(\"Prepare Request\").item.json.ctx, retry_count: 1 }), $(\"Prepare Request\").item.json.entity_type, $(\"Prepare Request\").item.json.entity_id, JSON.stringify({ attempts: 2, path: $(\"Prepare Request\").item.json.path }) ] }}"
+        }
+      },
+      "id": "19efcc30-8532-477c-91a6-e8412f3b41a9",
+      "name": "Log Recovered (Attempt 2)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2448,
+        288
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $(\"Classify Attempt 2\").item.json.status }}",
+              "type": "number"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ $(\"Classify Attempt 2\").item.json.body }}",
+              "type": "object"
+            },
+            {
+              "id": "attempts",
+              "name": "attempts",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "eclass",
+              "name": "error_class",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "ecode",
+              "name": "error_code",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "emsg",
+              "name": "error_message",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "213f9a27-6fa2-4d85-a6f1-36409a398f2a",
+      "name": "Recovered on Attempt 2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2672,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.log_action($1::jsonb, $2, $3, 'RETRY_ATTEMPT', 'FAILURE', $4::jsonb, $5, $6) AS log_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify({ ...$(\"Prepare Request\").item.json.ctx, retry_count: 2 }), $(\"Prepare Request\").item.json.entity_type, $(\"Prepare Request\").item.json.entity_id, JSON.stringify({ attempt: 2, path: $(\"Prepare Request\").item.json.path, status: $json.status }), $json.error_code, $json.error_message ] }}"
+        }
+      },
+      "id": "673a567d-3e71-4131-bebe-891ae3b57827",
+      "name": "Log Retry 2",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2448,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 4
+      },
+      "id": "21a29046-7371-4078-8984-3bf4b87dfe77",
+      "name": "Back Off 4s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2672,
+        480
+      ],
+      "webhookId": "b946631f-60cd-41bc-b3ec-308d34641dd5"
+    },
+    {
+      "parameters": {
+        "method": "={{ $(\"Prepare Request\").item.json.method }}",
+        "url": "={{ $(\"Prepare Request\").item.json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{ $(\"Prepare Request\").item.json.correlation_id }}"
+            },
+            {
+              "name": "X-Attempt",
+              "value": "3"
+            },
+            {
+              "name": "X-Fault-Inject",
+              "value": "={{ $(\"Prepare Request\").item.json.fault_inject }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Prepare Request\").item.json.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "id": "7f2439e0-5f73-4860-982b-97a1f7d1c4e6",
+      "name": "Call Backend (Attempt 3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2896,
+        480
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "={{ (() => { const s = $json.statusCode; if (s >= 200 && s < 300) return \"success\"; if (!s) return \"exhausted\"; const r = $json.body?.retryable; if (typeof r === \"boolean\") return r ? \"exhausted\" : \"fail\"; return (s === 429 || s === 408 || s >= 500) ? \"exhausted\" : \"fail\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": "={{ ($json.statusCode ?? 0) >= 200 && ($json.statusCode ?? 0) < 300 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $json.statusCode ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ (typeof $json.body === \"object\" && $json.body !== null) ? $json.body : { raw: $json.body ?? null } }}",
+              "type": "object"
+            },
+            {
+              "id": "attempts",
+              "name": "attempts",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "eclass",
+              "name": "error_class",
+              "value": "={{ (() => { const s = $json.statusCode; if (s >= 200 && s < 300) return \"\"; if (!s) return \"RETRYABLE\"; const r = $json.body?.retryable; if (typeof r === \"boolean\") return r ? \"RETRYABLE\" : \"NON_RETRYABLE\"; return (s === 429 || s === 408 || s >= 500) ? \"RETRYABLE\" : \"NON_RETRYABLE\"; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "ecode",
+              "name": "error_code",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : ($json.body?.code ?? ($json.statusCode ? \"HTTP_\" + $json.statusCode : \"NETWORK_ERROR\")) }}",
+              "type": "string"
+            },
+            {
+              "id": "emsg",
+              "name": "error_message",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.error?.message ?? $json.error ?? $json.statusMessage ?? \"request failed\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6ad15784-539c-45e5-a0ac-4de55154bd8f",
+      "name": "Classify Attempt 3",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3120,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "success"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "success"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "retries exhausted / failed"
+        }
+      },
+      "id": "f1f725dd-2552-48a1-b13c-361c943a5115",
+      "name": "Route Attempt 3",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3344,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.log_action($1::jsonb, $2, $3, 'RETRY_RECOVERED', 'SUCCESS', $4::jsonb) AS log_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify({ ...$(\"Prepare Request\").item.json.ctx, retry_count: 2 }), $(\"Prepare Request\").item.json.entity_type, $(\"Prepare Request\").item.json.entity_id, JSON.stringify({ attempts: 3, path: $(\"Prepare Request\").item.json.path }) ] }}"
+        }
+      },
+      "id": "d873003c-0bf3-48be-864c-b104d6b62149",
+      "name": "Log Recovered (Attempt 3)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3568,
+        432
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "outcome",
+              "name": "outcome",
+              "value": "success",
+              "type": "string"
+            },
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $(\"Classify Attempt 3\").item.json.status }}",
+              "type": "number"
+            },
+            {
+              "id": "body",
+              "name": "body",
+              "value": "={{ $(\"Classify Attempt 3\").item.json.body }}",
+              "type": "object"
+            },
+            {
+              "id": "attempts",
+              "name": "attempts",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "eclass",
+              "name": "error_class",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "ecode",
+              "name": "error_code",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "emsg",
+              "name": "error_message",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8e5c4afd-4675-4cfe-9522-cdbb2d2455ce",
+      "name": "Recovered on Attempt 3",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3792,
+        432
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "76061b33-092c-4e3c-b906-7ec9796ee05b",
+      "name": "Failed (Caller Decides)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3568,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## SWF-01 Backend Call (classified retry + backoff)\nThe only place that knows the backend URL and API key.\n- 2xx: return the result.\n- `retryable: true`, 429, 408, 5xx or a network error: retry after 2s, then 4s (3 attempts maximum). Each retry is logged as RETRY_ATTEMPT, and a success after a retry as RETRY_RECOVERED.\n- Any other 4xx: no retry.\nIt never throws. The caller gets `{ ok, status, body, attempts, error_class, error_code, error_message }` and decides between a fallback and the error queue (SWF-03).\n`X-Attempt` and `X-Fault-Inject` drive the deterministic failure demos.",
+        "color": 5
+      },
+      "id": "d4a6513f-ca63-41e1-b283-5b7cab434112",
+      "name": "Sticky Note 7af9cfb8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        112,
+        304
+      ]
+    }
+  ],
+  "connections": {
+    "When Called by Workflow": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request": {
+      "main": [
+        [
+          {
+            "node": "Call Backend (Attempt 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Backend (Attempt 1)": {
+      "main": [
+        [
+          {
+            "node": "Classify Attempt 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Attempt 1": {
+      "main": [
+        [
+          {
+            "node": "Route Attempt 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Attempt 1": {
+      "main": [
+        [
+          {
+            "node": "Succeeded First Time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Retry 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed (Caller Decides)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Retry 1": {
+      "main": [
+        [
+          {
+            "node": "Back Off 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back Off 2s": {
+      "main": [
+        [
+          {
+            "node": "Call Backend (Attempt 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Backend (Attempt 2)": {
+      "main": [
+        [
+          {
+            "node": "Classify Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Route Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Attempt 2": {
+      "main": [
+        [
+          {
+            "node": "Log Recovered (Attempt 2)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Retry 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed (Caller Decides)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Recovered (Attempt 2)": {
+      "main": [
+        [
+          {
+            "node": "Recovered on Attempt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Retry 2": {
+      "main": [
+        [
+          {
+            "node": "Back Off 4s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Back Off 4s": {
+      "main": [
+        [
+          {
+            "node": "Call Backend (Attempt 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Backend (Attempt 3)": {
+      "main": [
+        [
+          {
+            "node": "Classify Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Route Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Attempt 3": {
+      "main": [
+        [
+          {
+            "node": "Log Recovered (Attempt 3)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed (Caller Decides)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Recovered (Attempt 3)": {
+      "main": [
+        [
+          {
+            "node": "Recovered on Attempt 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "0dd92cb7-67e9-4ecd-a78e-3fb9cf6579c3",
+  "activeVersionId": "b2b159e0-e1b1-4605-a00d-fbba39c91650",
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T19:59:21.036Z",
+      "createdAt": "2026-10-01T19:59:21.036Z",
+      "role": "workflow:owner",
+      "workflowId": "aIsZuTp9Z6s1IqLi",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
