@@ -8,3 +8,5 @@ UPDATE hiring.settings SET value = '"2 minutes"',  updated_by = 'demo_fast_timer
 UPDATE hiring.settings SET value = '"4 minutes"',  updated_by = 'demo_fast_timers' WHERE key = 'offer.final_reminder_after';
 UPDATE hiring.settings SET value = '"6 minutes"',  updated_by = 'demo_fast_timers' WHERE key = 'offer.validity';
 UPDATE hiring.settings SET value = '"5 minutes"',  updated_by = 'demo_fast_timers' WHERE key = 'onboarding.overdue_reminder_every';
+-- Demo installs also allow X-Fault-Inject directives to follow a transaction (failure-scenario demos).
+UPDATE hiring.settings SET value = 'true', updated_by = 'demo_fast_timers' WHERE key = 'dev.fault_injection_enabled';
