@@ -102,6 +102,10 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
       DEFAULT_PHONE_REGION: ${DEFAULT_PHONE_REGION:-PK}
       FAULT_INJECTION_ENABLED: ${FAULT_INJECTION_ENABLED:-false}
+      LINK_SIGNING_SECRET: ${LINK_SIGNING_SECRET:?set LINK_SIGNING_SECRET in .env}
+      LINK_MAX_TTL_DAYS: ${LINK_MAX_TTL_DAYS:-30}
+      # Dispatcher kick + error replay webhooks (internal network; authenticated with the internal API key)
+      N8N_BASE_URL: http://n8n:5678
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       LLM_MODEL: ${LLM_MODEL:-claude-opus-5}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
