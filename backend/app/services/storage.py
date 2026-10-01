@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 _KEY_PATTERN = re.compile(r"^cv/\d{4}/\d{2}/[0-9a-f]{32}\.(pdf|docx)$")
+_OFFER_KEY_PATTERN = re.compile(r"^offers/\d{4}/[A-Z0-9-]{3,40}-r\d{1,2}\.pdf$")
 
 
 class InvalidStorageKeyError(ValueError):
@@ -23,6 +24,17 @@ def validate_cv_key(key: str) -> str:
     return key
 
 
+def validate_key(key: str) -> str:
+    """Any key this service may store: candidate CVs and generated offer letters."""
+    if not (_KEY_PATTERN.match(key or "") or _OFFER_KEY_PATTERN.match(key or "")):
+        raise InvalidStorageKeyError("invalid document reference")
+    return key
+
+
+def offer_document_key(offer_code: str, revision: int, year: int) -> str:
+    return validate_key(f"offers/{year:04d}/{offer_code}-r{revision}.pdf")
+
+
 def new_cv_key(extension: str) -> str:
     now = datetime.now(UTC)
     return f"cv/{now:%Y}/{now:%m}/{uuid.uuid4().hex}.{extension}"
@@ -30,6 +42,7 @@ def new_cv_key(extension: str) -> str:
 
 class Storage(Protocol):
     def save(self, key: str, data: bytes) -> None: ...
+    def read(self, key: str) -> bytes | None: ...
     def save_text(self, key: str, text: str) -> None: ...
     def exists(self, key: str) -> bool: ...
     def read_text(self, key: str) -> str | None: ...
@@ -47,11 +60,18 @@ class LocalStorage:
         return path
 
     def save(self, key: str, data: bytes) -> None:
-        path = self._path(validate_cv_key(key))
+        path = self._path(validate_key(key))
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_bytes(data)
         tmp.replace(path)  # atomic publish
+
+    def read(self, key: str) -> bytes | None:
+        try:
+            path = self._path(validate_key(key))
+        except InvalidStorageKeyError:
+            return None
+        return path.read_bytes() if path.is_file() else None
 
     def save_text(self, key: str, text: str) -> None:
         path = self._path(validate_cv_key(key)).with_suffix(".txt")
@@ -59,7 +79,7 @@ class LocalStorage:
 
     def exists(self, key: str) -> bool:
         try:
-            return self._path(validate_cv_key(key)).is_file()
+            return self._path(validate_key(key)).is_file()
         except InvalidStorageKeyError:
             return False
 
