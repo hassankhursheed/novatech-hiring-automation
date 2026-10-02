@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T20:06:19.524Z",
+  "updatedAt": "2026-10-02T18:34:43.444Z",
   "createdAt": "2026-10-01T19:59:21.036Z",
   "id": "aIsZuTp9Z6s1IqLi",
   "name": "SWF-01 Backend Call",
@@ -1157,7 +1157,9 @@
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": true,
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "ntWf07ErrRecover",
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "meta": {
@@ -1167,8 +1169,8 @@
   "nodeGroups": [],
   "pinData": {},
   "versionId": "0dd92cb7-67e9-4ecd-a78e-3fb9cf6579c3",
-  "activeVersionId": "b2b159e0-e1b1-4605-a00d-fbba39c91650",
-  "versionCounter": 2,
+  "activeVersionId": "0dd92cb7-67e9-4ecd-a78e-3fb9cf6579c3",
+  "versionCounter": 3,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

@@ -243,8 +243,11 @@ services:
     <<: [*restart, *logging]
     environment:
       MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db        # keep demo mail across restarts
       MP_SMTP_AUTH_ACCEPT_ANY: "true"
       MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    volumes:
+      - mailpit_data:/data
     ports:
       - "127.0.0.1:8025:8025"
     networks: [app]
@@ -258,3 +261,4 @@ volumes:
   n8n_db_data:
   n8n_data:
   storage_data:
+  mailpit_data:

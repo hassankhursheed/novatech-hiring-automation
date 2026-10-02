@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T20:10:56.563Z",
+  "updatedAt": "2026-10-02T18:34:42.747Z",
   "createdAt": "2026-10-01T20:09:37.585Z",
   "id": "ebKtDTWlruup0Nbg",
   "name": "WF-03 Scoring & AI Review",
@@ -1187,7 +1187,9 @@
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": true,
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "ntWf07ErrRecover",
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "meta": {
@@ -1198,7 +1200,7 @@
   "pinData": {},
   "versionId": "509bc5c4-18f8-4736-9406-91cb3d02daaa",
   "activeVersionId": "509bc5c4-18f8-4736-9406-91cb3d02daaa",
-  "versionCounter": 2,
+  "versionCounter": 3,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

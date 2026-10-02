@@ -1,20 +1,20 @@
 {
-  "updatedAt": "2026-10-01T20:11:16.857Z",
+  "updatedAt": "2026-10-01T21:02:46.801Z",
   "createdAt": "2026-10-01T20:11:16.857Z",
   "id": "kyyh3d0dVadoBjAF",
   "name": "WF-00 Dispatcher & Scheduler",
-  "description": "WF-00: durable timers + transactional outbox engine. Every minute (or when kicked) claims due ops.scheduled_actions with SKIP LOCKED, routes each to its owning workflow and records DONE/SKIPPED/FAILED (FAILED retries with exponential backoff).",
+  "description": "WF-00: durable timers + transactional outbox. Claims due scheduled actions (SKIP LOCKED), routes each to its owning workflow and records DONE/SKIPPED/FAILED with exponential backoff.",
   "active": true,
   "isArchived": false,
   "nodes": [
     {
-      "id": "9a6ebd63-eca1-45d3-b9c1-4fc43562efb0",
+      "id": "22df919c-b7ed-59c4-a59f-d67df94563e2",
       "name": "Every Minute",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.4,
+      "typeVersion": 1.3,
       "position": [
-        200,
-        300
+        240,
+        320
       ],
       "parameters": {
         "rule": {
@@ -28,13 +28,50 @@
       }
     },
     {
-      "id": "3b20b892-8285-49e4-9cec-fb3f257ca77d",
+      "id": "46116418-0862-5792-a7d2-c75045363cd7",
+      "name": "When Kicked by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        520
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "5b78c907-dc75-5668-afd1-9b307f0e7da7",
+      "name": "Kick Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        720
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops/kick",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "webhookId": "ff320d0a-33f8-5fbc-a175-d60ae88193fe"
+    },
+    {
+      "id": "33f7db91-8bd1-52e3-aaa7-a05619da2b15",
       "name": "Build Context",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        420,
-        400
+        500,
+        320
       ],
       "parameters": {
         "mode": "manual",
@@ -42,13 +79,13 @@
         "assignments": {
           "assignments": [
             {
-              "id": "ctx",
+              "id": "b3a2db4d-8b8a-5f29-af8e-fe15008d62b3",
               "name": "ctx",
               "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n-dispatcher\", workflow_name: \"WF-00\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
               "type": "object"
             },
             {
-              "id": "worker",
+              "id": "1d23f9d8-02a7-51b0-acb2-7cb14371ff9e",
               "name": "worker",
               "value": "={{ \"n8n-wf00-\" + $execution.id }}",
               "type": "string"
@@ -59,26 +96,13 @@
       "executeOnce": true
     },
     {
-      "id": "21e12728-1a17-4fdc-b9b1-126fb95731a2",
-      "name": "When Kicked by Workflow",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        200,
-        500
-      ],
-      "parameters": {
-        "inputSource": "passthrough"
-      }
-    },
-    {
-      "id": "c3350d1b-c1b8-4616-8e41-e9a88ba41d87",
+      "id": "ece9552b-58c7-592f-a451-d5a03280b0c6",
       "name": "Claim Due Actions",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        640,
-        400
+        760,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
@@ -95,13 +119,13 @@
       }
     },
     {
-      "id": "cceb8721-ed27-4a64-91cf-1f08e288d1f2",
+      "id": "de10e160-dd78-51cb-a55a-a37549cce0ec",
       "name": "Start Execution Log",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        860,
-        400
+        1020,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
@@ -119,13 +143,13 @@
       "executeOnce": true
     },
     {
-      "id": "8889f7ed-8c7c-4759-b4ab-1ebd6d561427",
+      "id": "70d4b81e-5554-57ab-a109-74b61e16d935",
       "name": "Claimed Actions",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1080,
-        400
+        1280,
+        320
       ],
       "parameters": {
         "mode": "manual",
@@ -133,23 +157,24 @@
         "assignments": {
           "assignments": [
             {
-              "id": "actions",
+              "id": "ffdaa068-8a93-5fcd-a3f5-2da3b3312142",
               "name": "actions",
               "value": "={{ $(\"Claim Due Actions\").all().map(i => i.json) }}",
               "type": "array"
             }
           ]
         }
-      }
+      },
+      "executeOnce": true
     },
     {
-      "id": "7e3e3273-fd74-4ecd-98c5-9454b70a5de0",
+      "id": "db407cbf-a7a6-56b0-a1c6-bc5ebb8bf658",
       "name": "One Item per Action",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        1300,
-        400
+        1540,
+        320
       ],
       "parameters": {
         "fieldToSplitOut": "actions",
@@ -158,13 +183,27 @@
       }
     },
     {
-      "id": "968eb19d-de74-4fb5-971d-e82f55681eff",
+      "id": "4bb021e0-d567-50c0-a14b-9a48e9883f27",
+      "name": "Loop Actions",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        10120,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "6deb33e6-c03d-5776-ad6e-623161034f5c",
       "name": "Finish Execution Log",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1740,
-        640
+        10380,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
@@ -182,57 +221,157 @@
       "executeOnce": true
     },
     {
-      "id": "0d7805a3-d6d5-4df1-80fd-e875337255ee",
+      "id": "89248b7d-9f47-5b92-a35c-fea4164ee623",
       "name": "Route by Action Type",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        1740,
-        400
+        10380,
+        520
       ],
       "parameters": {
         "mode": "rules",
         "rules": {
           "values": [
             {
-              "outputKey": "WF-03 screening",
+              "outputKey": "WF-02",
               "renameOutput": true,
               "conditions": {
                 "options": {
                   "caseSensitive": true,
                   "leftValue": "",
-                  "typeValidation": "strict"
+                  "typeValidation": "strict",
+                  "version": 2
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.action_type }}",
+                    "id": "552fe9bc-5457-52e0-ae7e-22d7ff045b3f",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
                     },
-                    "rightValue": "SCREEN_APPLICATION"
+                    "rightValue": "WF-02"
                   }
                 ],
                 "combinator": "and"
               }
             },
             {
-              "outputKey": "WF-02 rejection notice",
+              "outputKey": "WF-03",
               "renameOutput": true,
               "conditions": {
                 "options": {
                   "caseSensitive": true,
                   "leftValue": "",
-                  "typeValidation": "strict"
+                  "typeValidation": "strict",
+                  "version": 2
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.action_type }}",
+                    "id": "d4df50b5-d2e4-5a79-a249-e94648b8f1c8",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
                     },
-                    "rightValue": "SEND_REJECTION_NOTICE"
+                    "rightValue": "WF-03"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-04",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5b6ea01a-bc48-5e83-a2f7-c6e423860a6f",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-04"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-05",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "17a0f655-e05e-5d46-acfd-544fa5952783",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-05"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-06",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "298629c7-f140-5cde-a8cd-0be008e42a77",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-06"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-08",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ef5f5fad-0787-5fb8-ae72-50dfb8f204c5",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-08"
                   }
                 ],
                 "combinator": "and"
@@ -242,68 +381,24 @@
         },
         "options": {
           "fallbackOutput": "extra",
-          "renameFallbackOutput": "no handler yet"
+          "renameFallbackOutput": "no handler"
         }
       }
     },
     {
-      "id": "f399ee55-a205-4c30-9ea1-24fe7121f43b",
-      "name": "Run WF-03 Screening",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.3,
-      "position": [
-        1960,
-        240
-      ],
-      "parameters": {
-        "mode": "once",
-        "source": "database",
-        "workflowId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "ebKtDTWlruup0Nbg",
-          "cachedResultName": "WF-03 Scoring & AI Review"
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "action": "={{ $json }}"
-          },
-          "matchingColumns": [],
-          "schema": [
-            {
-              "id": "action",
-              "displayName": "action",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "object"
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {
-          "waitForSubWorkflow": true
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "id": "94b305ff-b331-4676-9bc1-3b68651bfcd0",
+      "id": "ee88022c-7449-5ae0-a809-1098bae908d9",
       "name": "Complete Action",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        2180,
-        400
+        9860,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT * FROM api.complete_scheduled_action($1::uuid, $2, $3::jsonb, NULLIF($4, ''), $5::jsonb)",
         "options": {
-          "queryReplacement": "={{ (() => { const a = $(\"Loop Actions\").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? \"FAILED\" : ($json.action_outcome || \"DONE\"); const reason = failedHard ? String($json.error?.message ?? $json.error) : ($json.action_reason || \"\"); return [ a.id, outcome, JSON.stringify({ reason }), outcome === \"FAILED\" ? reason : \"\", JSON.stringify({ ...$(\"Build Context\").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })() }}"
+          "queryReplacement": "={{ (() => { const a = $(\"Loop Actions\").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? \"FAILED\" : ($json.action_outcome || \"DONE\"); const reason = failedHard ? String($json.error?.message ?? $json.error) : ($json.action_reason || \"\"); return [ a.id, outcome, JSON.stringify({ reason, handler: $prevNode.name }), outcome === \"FAILED\" ? reason : \"\", JSON.stringify({ ...$(\"Build Context\").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })() }}"
         }
       },
       "credentials": {
@@ -314,13 +409,13 @@
       }
     },
     {
-      "id": "fbc7f8d9-176c-4c3a-82cd-4a76537d2712",
+      "id": "ced57837-514e-5ffe-a07e-1487630d5ba6",
       "name": "Run WF-02 Rejection Notice",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1960,
-        400
+        9600,
+        320
       ],
       "parameters": {
         "mode": "once",
@@ -398,13 +493,233 @@
       "onError": "continueRegularOutput"
     },
     {
-      "id": "349204e8-598a-4abd-b44e-d33af8326d13",
+      "id": "2bef2f28-e069-552a-acc0-8c2a61b46f59",
+      "name": "Run WF-03 Screening",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        9600,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ebKtDTWlruup0Nbg",
+          "cachedResultName": "WF-03 Scoring & AI Review"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c7173e58-dbea-556e-a3b4-59cb425ef38f",
+      "name": "Run WF-04 Interviews",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        9600,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ntWf04Interview1",
+          "cachedResultName": "WF-04 Interview Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a9400368-e633-537d-a888-f548d937e15e",
+      "name": "Run WF-05 Offers",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        9600,
+        920
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ntWf05OfferMgmt1",
+          "cachedResultName": "WF-05 Offer Management"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ca92a4f9-c0cc-57a2-aa12-dd86ad102ab4",
+      "name": "Run WF-06 Onboarding",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        9600,
+        1120
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ntWf06Onboarding",
+          "cachedResultName": "WF-06 Employee Onboarding"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6889b08a-eb13-536b-af45-9e13999d3512",
+      "name": "Run WF-08 Review Alerts",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        9600,
+        1320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "ntWf08Monitoring",
+          "cachedResultName": "WF-08 Monitoring & Reporting"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $json }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "173c1905-7a4a-5164-a029-5bce62305292",
       "name": "No Handler Registered",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1960,
-        560
+        9600,
+        1520
       ],
       "parameters": {
         "mode": "manual",
@@ -412,13 +727,13 @@
         "assignments": {
           "assignments": [
             {
-              "id": "outcome",
+              "id": "141e6c4f-96d8-55b3-a695-94ae1af318ff",
               "name": "action_outcome",
               "value": "FAILED",
               "type": "string"
             },
             {
-              "id": "reason",
+              "id": "7c7792d3-a32f-57e3-a0a6-494185f85a02",
               "name": "action_reason",
               "value": "={{ \"no handler registered for \" + $json.action_type + \" (retried with backoff; requeue after deploying the handler)\" }}",
               "type": "string"
@@ -428,30 +743,18 @@
       }
     },
     {
-      "id": "44f5fa8c-bab0-441e-9848-52b5d294502c",
-      "name": "Loop Actions",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [
-        1520,
-        400
-      ],
-      "parameters": {
-        "batchSize": 1,
-        "options": {}
-      }
-    },
-    {
-      "id": "fb4652c2-3ff0-41f0-a93c-348f407763ca",
-      "name": "Sticky Note 2bcfd160",
+      "id": "ad3c4e7e-52e6-5e1d-a745-53489898895e",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        100,
-        300
+        -320,
+        120
       ],
       "parameters": {
-        "content": "## WF-00 Dispatcher & Scheduler (durable timers + transactional outbox)\nEvery status change enqueues its follow-up in `ops.scheduled_actions` in the same DB transaction. Reminders and expiries are rows with a future `run_at`.\nThis workflow claims due rows with `FOR UPDATE SKIP LOCKED` (overlapping runs are safe), routes each one to its owning workflow and records DONE / SKIPPED / FAILED.\nFAILED is retried with exponential backoff (30 s up to 1 h). After max attempts it lands in the error queue.\nOther workflows can kick this one for low latency; the every-minute schedule is the safety net.",
+        "content": "## WF-00 Dispatcher & Scheduler (durable timers + transactional outbox)\nEvery status change enqueues its follow-up in `ops.scheduled_actions` in the same DB transaction; reminders and expiries are rows with a future `run_at`.\nThis workflow claims due rows with `FOR UPDATE SKIP LOCKED` (overlapping runs are safe), routes each one to its owning workflow (routing table in **Route by Action Type**) and records DONE / SKIPPED / FAILED.\nFAILED is retried with exponential backoff (30 s up to 1 h); after max attempts it lands in the error queue.\nTriggers: every minute (safety net), **Kick Webhook** `POST /webhook/ops/kick` (backend, after a person acts) and **When Kicked by Workflow**.",
+        "width": 620,
+        "height": 300,
         "color": 4
       }
     }
@@ -468,22 +771,33 @@
         ]
       ]
     },
-    "Build Context": {
+    "When Kicked by Workflow": {
       "main": [
         [
           {
-            "node": "Claim Due Actions",
+            "node": "Build Context",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "When Kicked by Workflow": {
+    "Kick Webhook": {
       "main": [
         [
           {
             "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Claim Due Actions",
             "type": "main",
             "index": 0
           }
@@ -534,15 +848,26 @@
         ]
       ]
     },
-    "Route by Action Type": {
+    "Loop Actions": {
       "main": [
         [
           {
-            "node": "Run WF-03 Screening",
+            "node": "Finish Execution Log",
             "type": "main",
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
         [
           {
             "node": "Run WF-02 Rejection Notice",
@@ -552,7 +877,53 @@
         ],
         [
           {
+            "node": "Run WF-03 Screening",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run WF-04 Interviews",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run WF-05 Offers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run WF-06 Onboarding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run WF-08 Review Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "No Handler Registered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-02 Rejection Notice": {
+      "main": [
+        [
+          {
+            "node": "Complete Action",
             "type": "main",
             "index": 0
           }
@@ -570,18 +941,40 @@
         ]
       ]
     },
-    "Complete Action": {
+    "Run WF-04 Interviews": {
       "main": [
         [
           {
-            "node": "Loop Actions",
+            "node": "Complete Action",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Run WF-02 Rejection Notice": {
+    "Run WF-05 Offers": {
+      "main": [
+        [
+          {
+            "node": "Complete Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-06 Onboarding": {
+      "main": [
+        [
+          {
+            "node": "Complete Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF-08 Review Alerts": {
       "main": [
         [
           {
@@ -603,18 +996,11 @@
         ]
       ]
     },
-    "Loop Actions": {
+    "Complete Action": {
       "main": [
         [
           {
-            "node": "Finish Execution Log",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Route by Action Type",
+            "node": "Loop Actions",
             "type": "main",
             "index": 0
           }
@@ -624,7 +1010,9 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover"
   },
   "staticData": {
     "node:Every Minute": {
@@ -641,11 +1029,11 @@
     "builderVariant": "mcp"
   },
   "nodeGroups": [],
-  "pinData": null,
-  "versionId": "4e65e66b-cd92-4ca6-b5b4-186f0b81b830",
-  "activeVersionId": "4e65e66b-cd92-4ca6-b5b4-186f0b81b830",
-  "versionCounter": 1,
-  "triggerCount": 1,
+  "pinData": {},
+  "versionId": "a726d426-1b76-4149-b17f-dbf9af6ec84e",
+  "activeVersionId": "a726d426-1b76-4149-b17f-dbf9af6ec84e",
+  "versionCounter": 2,
+  "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],
   "shared": [
@@ -669,7 +1057,7 @@
     }
   ],
   "versionMetadata": {
-    "name": "Initial dispatcher with screening and rejection routes",
-    "description": "Created with 15 nodes: Every Minute, Build Context, When Kicked by Workflow, Claim Due Actions, Start Execution Log and 10 more"
+    "name": null,
+    "description": null
   }
 }

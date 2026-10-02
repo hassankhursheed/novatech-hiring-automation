@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T20:02:35.586Z",
+  "updatedAt": "2026-10-02T18:34:41.952Z",
   "createdAt": "2026-10-01T20:02:35.586Z",
   "id": "76ahG9hzRP7cuQL4",
   "name": "WF-02 Candidate Processing",
@@ -962,7 +962,9 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "errorWorkflow": "ntWf07ErrRecover",
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "meta": {
@@ -973,7 +975,7 @@
   "pinData": null,
   "versionId": "d663161e-fc44-4e68-a3c4-f3f1d3173807",
   "activeVersionId": "d663161e-fc44-4e68-a3c4-f3f1d3173807",
-  "versionCounter": 1,
+  "versionCounter": 2,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

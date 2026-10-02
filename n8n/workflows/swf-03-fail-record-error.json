@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T19:53:40.534Z",
+  "updatedAt": "2026-10-02T18:34:44.828Z",
   "createdAt": "2026-10-01T19:53:40.534Z",
   "id": "IBNva3yYim0EcUCT",
   "name": "SWF-03 Fail & Record Error",
@@ -160,7 +160,9 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "errorWorkflow": "ntWf07ErrRecover",
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "meta": {
@@ -171,7 +173,7 @@
   "pinData": null,
   "versionId": "66c79362-d51a-4ee3-a1e4-505cecca8be2",
   "activeVersionId": "66c79362-d51a-4ee3-a1e4-505cecca8be2",
-  "versionCounter": 1,
+  "versionCounter": 2,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
