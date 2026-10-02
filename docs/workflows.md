@@ -1,6 +1,6 @@
 # n8n workflows and responsibilities
 
-Nine workflows plus three reusable sub-workflows. Each one has a single responsibility, is short-lived, and
+Ten workflows plus three reusable sub-workflows. Each one has a single responsibility, is short-lived, and
 talks to the database **only** through `api.*` functions (Postgres node, parameterised queries).
 
 ```mermaid
@@ -195,6 +195,14 @@ deterministic dedupe key, so a retried or replayed branch never sends a message 
 | Report | `reporting.daily_metrics(date)` (default yesterday) → SWF-01 `POST /v1/reports/daily-summary` (template text, or AI prose that is rejected if it contains any number not in the metrics) → `api.save_daily_report` (one per date) → email to HR admins and L2 approvers (`report.daily:<date>`) → `api.mark_daily_report_delivered`. Already delivered → SKIPPED unless `force` |
 | Review alerts | Re-checks the application is still in `SCREENING_REVIEW` / `INTERVIEW_REVIEW` → email to the recruiters, or to the position's hiring manager for interview reviews, with the reason and the scores |
 | Rule | Every number comes from SQL. AI only writes prose. |
+
+### WF-09 Notification API
+| | |
+|---|---|
+| Responsibility | Let the backend send a one-off message (staff sign-in links) without knowing the mail provider |
+| Trigger | Webhook `POST /webhook/ops/notify` (header auth) with `dedupe_key`, `template_key`, `recipient`, `subject`, `html` |
+| Steps | Validate (one address, lower.dot_case template key, non-empty subject and body; otherwise 400) → SWF-02 → `{status, duplicate_suppressed}` |
+| Why | SWF-02 stays the only place that knows the mail credential, and every message is recorded in `ops.notifications` and sent at most once |
 
 ## Brief scenario coverage
 

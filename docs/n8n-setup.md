@@ -26,7 +26,7 @@ Create these in *Credentials → Add credential*. Names matter: the exported wor
 | `NovaTech Telegram bot` (optional) | Telegram API | Bot token from @BotFather: HR/ops alerts only |
 
 The same `NovaTech Backend API key` credential also protects the operations webhooks n8n exposes to the backend
-(`/webhook/ops/kick`, `/webhook/ops/replay`, `/webhook/ops/daily-report`): callers must send the same `X-API-Key`.
+(`/webhook/ops/kick`, `/webhook/ops/replay`, `/webhook/ops/notify`, `/webhook/ops/daily-report`, `/webhook/ops/onboarding-sweep`): callers must send the same `X-API-Key`.
 
 **Calendar.** Interview and orientation emails carry an "Add to calendar" link and WF-04 records a stable event id
 (`api.record_calendar_event`), so no calendar account is needed. To create events in Google Calendar or Outlook
