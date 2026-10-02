@@ -631,13 +631,17 @@ def s23(p: Proof) -> None:
     subject = f"[Overdue] Collect signed contract and documents for {c.full_name}"
     h.ops_webhook("onboarding-sweep")
     for _ in range(30):
-        if h.emails(HR_EMAIL, subject):
+        if count(h, c, "onboarding.task_overdue"):
             break
         time.sleep(1)
-    p.check(h.emails(HR_EMAIL, subject), "owner (HR) reminded by the onboarding sweep")
+    reminders = [n for n in h.notifications(c, "onboarding.task_overdue") if n["status"] == "SENT"]
+    p.check(len(reminders) == 1 and reminders[0]["recipient"] == HR_EMAIL, "task owner (HR) reminded by the sweep")
+    p.check(h.emails(HR_EMAIL, subject), "reminder is in the owner's inbox")
     h.ops_webhook("onboarding-sweep")
     time.sleep(5)
-    p.check(len(h.emails(HR_EMAIL, subject)) == 1, "a second sweep does not remind again within the reminder interval")
+    p.check(
+        count(h, c, "onboarding.task_overdue") == 1, "a second sweep does not remind again within the reminder interval"
+    )
     metrics = h.one("SELECT reporting.daily_metrics(current_date) AS m")["m"]
     p.check(
         metrics["overdue_onboarding_tasks"] >= 1,
