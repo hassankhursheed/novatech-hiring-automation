@@ -32,6 +32,10 @@ docker compose up -d --build
 
 # 4. Check status
 docker compose ps
+
+# 5. Open http://localhost:5678, create the n8n owner account and the three credentials (docs/n8n-setup.md),
+#    then deploy all workflows:
+powershell -ExecutionPolicy Bypass -File scripts\n8n-deploy.ps1 --exported
 ```
 
 Linux/macOS: `sh scripts/new-env.sh` then the same `docker compose` commands.
@@ -63,7 +67,8 @@ db/seed/            NovaTech configuration: staff, positions, scoring rules, ski
 db/bootstrap/       role bootstrap for managed Postgres (Supabase / Cloud SQL / RDS)
 infra/              container init scripts (DB roles, seeding)
 n8n/workflows/      exported n8n workflows (version-controlled, no credentials)
-scripts/            .env generator, n8n export/import
+n8n/src/            workflow-as-code for WF-00 and WF-04..WF-08 (node n8n/src/build.mjs)
+scripts/            .env generator, n8n deploy / export
 docs/               architecture, database/ERD, state machine, workflows, reliability, configuration, n8n setup
 ```
 
@@ -105,8 +110,8 @@ docs/               architecture, database/ERD, state machine, workflows, reliab
 |---|---|---|
 | 0 | Checkpoint: architecture, ERD, workflow responsibilities | done, in `docs/` (submit for review) |
 | 1 | Foundation: Docker stack, n8n 2.x local setup, database schema + state machine + idempotency + scheduling + reporting, backend intake/scoring/AI | **done** |
-| 2 | Interview + offer + onboarding database functions; backend: interview evaluation, offer PDF, signed candidate links, report summary | next |
-| 3 | n8n workflows WF-00…WF-08 + sub-workflows (exported to `n8n/workflows`) | next |
+| 2 | Interview + offer + onboarding database functions; backend: interview evaluation, offer PDF, signed links, candidate portal API, staff API, report summary | **done** (175 unit/API + 41 DB integration tests) |
+| 3 | n8n workflows WF-00…WF-08 + sub-workflows (exported to `n8n/workflows`, WF-00/04–08 also as code in `n8n/src`) | **done**, verified end to end: application → interview → approved offer → accepted → onboarded employee |
 | 4 | React + TypeScript careers form, candidate pages, HR portal, ops dashboard | planned |
 | 5 | 40+ fictional applications, scenario runner for the 23 mandatory scenarios, test report, demo | planned |
 

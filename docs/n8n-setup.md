@@ -24,7 +24,14 @@ Create these in *Credentials → Add credential*. Names matter: the exported wor
 | `NovaTech Backend API key` | Header Auth | Name `X-API-Key` · Value = the first key in `INTERNAL_API_KEYS` from `.env` |
 | `Mailpit SMTP (dev)` | SMTP | Host `mailpit` · Port `1025` · User/password: anything · SSL/TLS off |
 | `NovaTech Telegram bot` (optional) | Telegram API | Bot token from @BotFather: HR/ops alerts only |
-| `NovaTech Google Calendar` (step 2) | Google Calendar OAuth2 | OAuth client from Google Cloud Console; redirect URL `http://localhost:5678/rest/oauth2-credential/callback` |
+
+The same `NovaTech Backend API key` credential also protects the operations webhooks n8n exposes to the backend
+(`/webhook/ops/kick`, `/webhook/ops/replay`, `/webhook/ops/daily-report`): callers must send the same `X-API-Key`.
+
+**Calendar.** Interview and orientation emails carry an "Add to calendar" link and WF-04 records a stable event id
+(`api.record_calendar_event`), so no calendar account is needed. To create events in Google Calendar or Outlook
+instead, replace the *Record Calendar Event* node in WF-04 with the provider node and pass its event id to
+`api.record_calendar_event`.
 
 Notes:
 * The `n8n_app` database role can **read** tables and **execute `api.*` functions only**. A workflow that tries
@@ -56,14 +63,29 @@ Follow [workflows.md → Conventions](workflows.md#conventions-every-workflow-fo
 * *Workflow settings → Timezone* = `Asia/Karachi` (already the instance default via `GENERIC_TIMEZONE`).
 * In n8n 2.x, saving a workflow does not activate it. Use **Publish** to activate triggers.
 
-## 5. Version control
+## 5. Deploying workflows and version control
 
-Workflows are exported to `n8n/workflows/` (one JSON file each) and committed. Credentials are never exported.
+Workflows are versioned in two forms. Credentials are never exported.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\n8n-export.ps1   # after editing in the UI
-powershell -ExecutionPolicy Bypass -File scripts\n8n-import.ps1   # on a fresh install
+| Path | What | Source of truth for |
+|---|---|---|
+| `n8n/src/*.mjs` | Workflow-as-code: WF-00 and WF-04 to WF-08, built with small helpers (`n8n/src/lib.mjs`) | the code-defined workflows |
+| `n8n/workflows/*.json` | Exports of **every** workflow from the running n8n (one file each) | WF-01 to WF-03 and SWF-01 to SWF-03 (edited in the UI), and what is deployed |
+
+```bash
+sh scripts/n8n-deploy.sh                # build n8n/src -> import -> publish -> restart n8n
+sh scripts/n8n-deploy.sh WF-04          # only one workflow
+sh scripts/n8n-deploy.sh --exported     # fresh install / restore: deploy every file in n8n/workflows
+sh scripts/n8n-export.sh                # after any change: export, then commit
 ```
+
+On Windows, `scripts\n8n-deploy.ps1` and `scripts\n8n-export.ps1` take the same arguments. The deploy imports into the
+owner's personal project (create the owner account and the credentials first), publishes WF-07 before the others
+(it is their error workflow), and restarts n8n so schedules and webhooks are registered.
+
+Workflow ids are fixed (for example `ntWf04Interview1`), so a redeploy updates a workflow in place and calls between
+workflows keep working. Node ids are derived from the workflow id and node name. `node n8n/src/build.mjs` rejects
+an expression that contains a stray `}}`, which would otherwise end the expression early.
 
 The export script fails if it finds something that looks like a secret inside a workflow file.
 

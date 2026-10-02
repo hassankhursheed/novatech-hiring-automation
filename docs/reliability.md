@@ -53,21 +53,24 @@ The same failure reported twice (explicit handler + Error Trigger) collapses int
 (`fingerprint`, `occurrence_count`).
 
 Surfacing:
-* `reporting.v_error_queue`
-* `manual_intervention_required` in the daily metrics
-* Telegram alert (WF-07)
+* `reporting.v_error_queue` (also `GET /v1/staff/queues/errors`)
+* `manual_intervention_required` in the daily metrics and report
+* an error digest email to `ops.alert_email` every 5 minutes (WF-07); `alerted_at` guarantees each error is
+  alerted once
 
 ## 5. Safe replay
 
 ```mermaid
 sequenceDiagram
-    participant Op as Operator (HR portal)
+    participant Op as Operator (staff API / portal)
+    participant BE as Backend
     participant WF7 as WF-07 Replay
     participant DB as PostgreSQL
     participant WFx as Target workflow
-    Op->>WF7: replay error_id (after fixing the cause)
-    WF7->>DB: api.begin_error_replay() -> payload + replay_workflow (status REPLAYING)
-    WF7->>WFx: Execute with original payload
+    Op->>BE: POST /v1/staff/errors/{id}/replay (after fixing the cause)
+    BE->>WF7: POST /webhook/ops/replay {error_id, requested_by}
+    WF7->>DB: api.begin_error_replay() -> payload + replay_workflow (status REPLAYING, replayed by)
+    WF7->>WFx: WF-00: requeue the action / WF-01: re-submit with the original key / others: Execute with payload
     WFx->>DB: same api.* calls, same keys -> idempotent
     alt success
         WF7->>DB: api.resolve_error('RESOLVED')
@@ -78,7 +81,11 @@ sequenceDiagram
 
 Replay cannot duplicate anything because it reuses the original idempotency key and entity ids, and every step
 on the path is idempotent (section 1). A `REPLAYING` item whose replay crashed becomes replayable again after
-10 minutes.
+10 minutes. The HTTP response tells the operator whether the replay resolved the item or it is open again.
+
+**Verified:** a `NOTIFY_REVIEW_QUEUE` action that exhausted its 5 attempts (no handler deployed yet) was replayed
+after WF-08 went live: the action was requeued, the dispatcher ran it, the recruiters got exactly one email and
+the error was `RESOLVED` with the staff member recorded as `resolved_by`.
 
 ## 6. Timers (reminders, expiries) without fragile waits
 
@@ -98,8 +105,9 @@ For demos, `DEMO_FAST_TIMERS=true` compresses days to minutes without changing a
 
 ## 7. Fault injection (demonstrating failures deterministically)
 
-Dev/test only (disabled in production). The caller sends
-`X-Fault-Inject: <target>:<mode>[@n]` and `X-Attempt: <attempt>`:
+Dev/test only: the backend honours it only with `FAULT_INJECTION_ENABLED=true` (forced off in production), and
+the workflows only carry it across steps when the database setting `dev.fault_injection_enabled` is true.
+The caller sends `X-Fault-Inject: <target>:<mode>[@n]`; SWF-01 adds `X-Attempt: <attempt>`.
 
 | Header | Effect | Scenario |
 |---|---|---|
@@ -108,7 +116,13 @@ Dev/test only (disabled in production). The caller sends
 | `score:http_503` | fails every attempt | 10: retries exhausted → dead queue |
 | `ai:malformed` | model output replaced by invalid JSON | 7: fallback → manual review |
 | `ai:timeout` | simulated provider timeout (retryable) | AI outage handling |
+| `evaluate:http_503`, `document:http_400`, … | same modes for the interview evaluation and offer letter calls | failure handling in WF-04 / WF-05 |
 
-Because the faults are driven by the attempt number, they are stateless and behave the same across workers
-and replays. The test submission carries the header, and WF-01 stores it in the event payload so a replay can
-run without it.
+Targets: `validate`, `cv`, `score`, `ai`, `decide`, `evaluate`, `document`. Faults are driven by the attempt number,
+so they are stateless and behave the same across workers and replays.
+
+**Carrying a fault across asynchronous steps.** The header arrives with the application (WF-01), but scoring runs
+later in WF-03, started by the dispatcher. WF-01 therefore stores it as a *test directive* for the correlation id
+(`api.set_test_directive`, table `ops.test_directives`); handlers read `api.test_directive(correlation_id)` and pass
+it to SWF-01. Clearing the directive (`api.set_test_directive(corr, '')`) and replaying the error proves the
+"fixed, replayed, no duplicates" path (scenario 11).

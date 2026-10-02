@@ -33,6 +33,8 @@ Configuration is split by who changes it and how often:
 | `MAX_UPLOAD_MB` | backend | CV size limit |
 | `DEFAULT_PHONE_REGION` | backend | region for parsing local phone numbers (`PK`) |
 | `FAULT_INJECTION_ENABLED` | backend | honour `X-Fault-Inject` (dev/test only) |
+| `LINK_SIGNING_SECRET` | backend | signs the links in emails (slot choice, offer response, scorecard, approval); required in production, at least 32 characters. Rotating it invalidates links already sent |
+| `LINK_MAX_TTL_DAYS` | backend | upper bound for any link's validity (default 30); links normally expire at the business deadline |
 | `LLM_PROVIDER`, `LLM_MODEL` | backend | `anthropic` / `openai` / `mistral` / `google` / `none`; model id (default `claude-opus-5`) |
 | `LLM_TIMEOUT_SECONDS`, `LLM_MAX_TOKENS` | backend | AI call limits |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `MISTRAL_API_KEY` / `GOOGLE_API_KEY` | backend | key for the selected provider only; missing key → AI disabled, candidates go to review |
@@ -53,15 +55,20 @@ UPDATE hiring.settings SET value = '300000', updated_by = 'sana.malik' WHERE key
 |---|---|---|
 | `company.name` / `company.timezone` / `company.currency` | NovaTech Solutions / Asia/Karachi / PKR | company identity |
 | `company.email_domain`, `company.employee_code_prefix` | novatech.example / NT | simulated account creation, employee IDs |
+| `company.portal_url` | http://localhost:5173 | base URL of the candidate / staff portal used in email links |
+| `company.careers_email` | careers@novatech.example | contact address printed in candidate emails and the offer letter |
+| `ops.alert_email` | ops-alerts@novatech.example | recipient of the error digest (WF-07) and fallback for reports |
 | `screening.auto_reject_enabled` | true | if false, low scores go to review instead of automatic rejection |
 | `screening.ai_enabled` | true | if false, screening runs on rules only |
 | `interview.invite_reminder_after` / `invite_expires_after` | 2 days / 4 days | unconfirmed invitation handling |
 | `interview.feedback_reminder_after` / `feedback_escalate_after` | 1 day / 2 days | missing interviewer feedback |
+| `interview.slot_min_notice` | 2 hours | earliest slot offered or bookable, relative to now |
 | `evaluation.application_weight` / `interview_weight` | 0.30 / 0.70 | final score formula |
 | `evaluation.select_min_score` / `review_min_score` | 75 / 60 | interview decision thresholds |
 | `offer.second_approval_threshold` | 250000 | monthly salary above which L2 approval is required |
 | `offer.validity`, `offer.first_reminder_after`, `offer.final_reminder_after` | 5 d, 2 d, 4 d | offer timers |
 | `offer.default_probation_months` | 3 | offer default |
+| `offer.joining_lead_days` | 14 | default minimum days between the offer and the joining date |
 | `onboarding.overdue_reminder_every` | 1 day | reminder spacing for overdue tasks |
 | `privacy.rejected_retention` | 180 days | anonymise rejected candidates' personal data after this |
 
