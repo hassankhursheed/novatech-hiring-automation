@@ -118,7 +118,7 @@ docs/               architecture, database/ERD, state machine, workflows, reliab
 | 2 | Interview + offer + onboarding database functions; backend: interview evaluation, offer PDF, signed links, candidate portal API, staff API, report summary | **done** (175 unit/API + 41 DB integration tests) |
 | 3 | n8n workflows WF-00…WF-08 + sub-workflows (exported to `n8n/workflows`, WF-00/04–08 also as code in `n8n/src`) | **done**, verified end to end: application → interview → approved offer → accepted → onboarded employee |
 | 4 | React + TypeScript careers form, candidate pages, HR portal, ops dashboard; passwordless staff sign-in | **done** (`frontend/`, served on http://localhost:5173) |
-| 5 | 40+ fictional applications, scenario runner for the 23 mandatory scenarios, test report, demo | planned |
+| 5 | 42 fictional applications, scenario runner for the 23 mandatory scenarios, test report | **done**: [docs/scenario-report.md](docs/scenario-report.md) (23/23, 42/42); demo walkthrough next |
 
 ## Production notes
 
