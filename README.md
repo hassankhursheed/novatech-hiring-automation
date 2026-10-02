@@ -17,7 +17,7 @@ Built as a production-style system:
 | Source of truth | **PostgreSQL 17** | Tables, constraints, state machine, idempotency, audit log, reporting views |
 | Business logic | **FastAPI** (Python 3.12, Pydantic v2) | Validation/normalisation, scoring engine, AI analysis, CV extraction |
 | AI | **LangChain** + Claude (`claude-opus-5`, provider-configurable), Langfuse tracing | Advisory, structured, validated candidate analysis |
-| Frontend | React + TypeScript (next phase) | Careers form, candidate links, HR portal, ops dashboard |
+| Portal | **React + TypeScript** (Vite, TanStack Query, Tailwind; nginx in Docker) | Careers form, candidate and staff link pages, HR portal and operations dashboard |
 
 ## Quick start (Windows, Docker Desktop)
 
@@ -45,6 +45,7 @@ Linux/macOS: `sh scripts/new-env.sh` then the same `docker compose` commands.
 | n8n editor | http://localhost:5678 | create the owner account on first visit, see [docs/n8n-setup.md](docs/n8n-setup.md) |
 | Backend API docs | http://localhost:8000/docs | Swagger UI (development only) |
 | Backend health | http://localhost:8000/health/ready | `database: true` when ready |
+| Portal | http://localhost:5173 | careers form, candidate/staff link pages, HR portal (sign in with a seeded staff email, e.g. `sana.malik@novatech.example`; the link arrives in Mailpit) |
 | Mailpit (dev inbox) | http://localhost:8025 | every email sent in development lands here |
 | Business database | `localhost:5433` | db `novatech`; connect with any SQL client |
 
@@ -63,6 +64,7 @@ docker compose down -v                                   # stop AND delete all d
 
 ```
 backend/            FastAPI service (app/, tests/, Dockerfile, pyproject.toml, uv.lock)
+frontend/           React + TypeScript portal (Vite; Dockerfile serves it from unprivileged nginx)
 db/migrations/      SQL migrations (dbmate): schema, state machine, api.* functions, reporting, privileges
 db/seed/            NovaTech configuration: staff, positions, scoring rules, skills, onboarding, interview slots
 db/bootstrap/       role bootstrap for managed Postgres (Supabase / Cloud SQL / RDS)
@@ -115,7 +117,7 @@ docs/               architecture, database/ERD, state machine, workflows, reliab
 | 1 | Foundation: Docker stack, n8n 2.x local setup, database schema + state machine + idempotency + scheduling + reporting, backend intake/scoring/AI | **done** |
 | 2 | Interview + offer + onboarding database functions; backend: interview evaluation, offer PDF, signed links, candidate portal API, staff API, report summary | **done** (175 unit/API + 41 DB integration tests) |
 | 3 | n8n workflows WF-00…WF-08 + sub-workflows (exported to `n8n/workflows`, WF-00/04–08 also as code in `n8n/src`) | **done**, verified end to end: application → interview → approved offer → accepted → onboarded employee |
-| 4 | React + TypeScript careers form, candidate pages, HR portal, ops dashboard | planned |
+| 4 | React + TypeScript careers form, candidate pages, HR portal, ops dashboard; passwordless staff sign-in | **done** (`frontend/`, served on http://localhost:5173) |
 | 5 | 40+ fictional applications, scenario runner for the 23 mandatory scenarios, test report, demo | planned |
 
 ## Production notes

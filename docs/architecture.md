@@ -10,7 +10,7 @@ that a failure at any point is visible, recoverable and never creates duplicate 
 | Must this rule never break, even when a workflow has a bug? | **PostgreSQL** | Constraints, the state machine and idempotency live in the database, so no caller can bypass them. |
 | Does it talk to an outside app, involve time, or coordinate steps? | **n8n** | Webhooks, email/calendar/chat, schedules, retries, human hand-offs, orchestration. |
 | Does it need types, unit tests or libraries (parsing, AI, PDF)? | **FastAPI** | Pydantic contracts, pytest, LangChain, document parsing. Endpoints are pure computations. |
-| Does a person look at it or click it? | **React + TypeScript** (next phase) | Careers form, candidate links, HR portal, operations dashboard. |
+| Does a person look at it or click it? | **React + TypeScript** (`frontend/`) | Careers form, candidate links, HR portal, operations dashboard. |
 
 Two consequences:
 
@@ -32,7 +32,7 @@ flowchart LR
         HR[HR / Recruiter / Managers]
     end
 
-    subgraph Frontend["React + TypeScript (phase 3)"]
+    subgraph Frontend["React + TypeScript portal"]
         F1[Careers form]
         F2[Candidate links<br/>slot / offer response]
         F3[HR portal + ops dashboard]
@@ -165,6 +165,8 @@ Single-tenant: one installation per company, run with `docker compose`.
 | `n8n` | n8nio/n8n:2.40.7 | localhost:5678 |
 | `n8n-runners` | n8nio/runners:2.40.7 (external task runners) | internal |
 | `n8n-db` | postgres:17-alpine (n8n's own state) | internal |
+| `portal` | built from `frontend/Dockerfile` (nginx-unprivileged) | localhost:5173 |
+| `mailpit` | axllent/mailpit (development inbox) | localhost:8025 |
 
 For production, put a reverse proxy (Caddy/Traefik/nginx) with TLS in front. Expose only `/webhook/*`
 and the portal publicly, and keep the n8n editor behind VPN or SSO. Set `N8N_SECURE_COOKIE=true` and
@@ -185,8 +187,15 @@ n8n for many paying companies as your own SaaS needs a commercial agreement with
 * Candidates, interviewers and approvers act through **signed, expiring links** (HS256 JWT, `LINK_SIGNING_SECRET`):
   each token names one person, one entity and one purpose, expires with the business deadline, and travels in the
   URL fragment so it never reaches server logs. The database still checks ownership and state on every action.
-* Staff endpoints currently identify the staff member with `X-Staff-Id` behind the service key (for internal tools
-  and the portal's server side). The React portal will replace this with company SSO (OIDC).
+* Staff sign in to the portal **without passwords**: `POST /v1/auth/staff/login-link` emails a single-use, 15-minute
+  link (the response never reveals whether an address exists; one link per minute per address); the portal
+  exchanges it once (`api.consume_link_token`) for an 8-hour session token. Sign-ins and refused re-use are audited
+  against the staff member. A company with an identity provider can swap the email step for OIDC; the session and
+  everything after it stay the same.
+* Internal tools can call `/v1/staff/*` server-side with the service key plus `X-Staff-Id`. Either way the database
+  re-checks that the staff member is active and allowed to act.
+* The portal is served by unprivileged nginx with a Content-Security-Policy, `no-referrer`, `nosniff` and frame
+  denial; link tokens are read from the URL fragment and removed from the address bar on load.
 * Secrets live only in `.env` / n8n credentials. The backend container receives only the variables it needs.
 * All ports are bound to `127.0.0.1`. CV uploads are type-checked by magic bytes and size-limited, with a
   zip-bomb guard.
