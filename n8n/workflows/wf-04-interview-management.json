@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "updatedAt": "2026-10-02T19:18:10.191Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf04Interview1",
   "name": "WF-04 Interview Management",
@@ -457,7 +457,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
-            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.error?.message ?? $json.error) : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-04\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-04\", payload: { action: a } }; })() }}"
+            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"step failed\") : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-04\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-04\", payload: { action: a } }; })() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -3005,9 +3005,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "5734f611-a832-498a-996f-18604c4296a1",
-  "activeVersionId": "5734f611-a832-498a-996f-18604c4296a1",
-  "versionCounter": 1,
+  "versionId": "f4d1ba21-b320-4099-83bc-5e177b7efe4e",
+  "activeVersionId": "f4d1ba21-b320-4099-83bc-5e177b7efe4e",
+  "versionCounter": 2,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

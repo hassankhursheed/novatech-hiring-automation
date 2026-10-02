@@ -61,7 +61,7 @@ export default function build() {
   w.add(pg('Complete Action', 'SELECT * FROM api.complete_scheduled_action($1::uuid, $2, $3::jsonb, NULLIF($4, \'\'), $5::jsonb)', [],
     {}));
   w.nodes.at(-1).parameters.options = {
-    queryReplacement: x('(() => { const a = $("Loop Actions").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? "FAILED" : ($json.action_outcome || "DONE"); const reason = failedHard ? String($json.error?.message ?? $json.error) : ($json.action_reason || ""); return [ a.id, outcome, JSON.stringify({ reason, handler: $prevNode.name }), outcome === "FAILED" ? reason : "", JSON.stringify({ ...$("Build Context").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })()'),
+    queryReplacement: x('(() => { const a = $("Loop Actions").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? "FAILED" : ($json.action_outcome || "DONE"); const reason = failedHard ? String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "sub-workflow failed") : ($json.action_reason || ""); return [ a.id, outcome, JSON.stringify({ reason, handler: $prevNode.name }), outcome === "FAILED" ? reason : "", JSON.stringify({ ...$("Build Context").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })()'),
   };
 
   const labels = { 'WF-02': 'Run WF-02 Rejection Notice', 'WF-03': 'Run WF-03 Screening', 'WF-04': 'Run WF-04 Interviews',

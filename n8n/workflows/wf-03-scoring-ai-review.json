@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T18:34:42.747Z",
+  "updatedAt": "2026-10-02T19:15:33.972Z",
   "createdAt": "2026-10-01T20:09:37.585Z",
   "id": "ebKtDTWlruup0Nbg",
   "name": "WF-03 Scoring & AI Review",
@@ -710,7 +710,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
-            "error": "={{ (() => { const pg = $json.error !== undefined; const msg = pg ? String($json.error?.message ?? $json.error) : String($json.error_message || \"screening step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-03\", node_name: $prevNode.name, error_class: pg ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: pg ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"SCREENING_FAILED\"), error_message: msg, http_status: pg ? null : ($json.status || null), retry_count: pg ? 0 : ($json.attempts || 0), entity_type: \"APPLICATION\", entity_id: $(\"Build Context\").item.json.application_id, replay_workflow: \"WF-03\", payload: { action: $(\"Build Context\").item.json.action } }; })() }}"
+            "error": "={{ (() => { const pg = $json.error !== undefined; const msg = pg ? String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"screening step failed\") : String($json.error_message || \"screening step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-03\", node_name: $prevNode.name, error_class: pg ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: pg ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"SCREENING_FAILED\"), error_message: msg, http_status: pg ? null : ($json.status || null), retry_count: pg ? 0 : ($json.attempts || 0), entity_type: \"APPLICATION\", entity_id: $(\"Build Context\").item.json.application_id, replay_workflow: \"WF-03\", payload: { action: $(\"Build Context\").item.json.action } }; })() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -1198,9 +1198,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "509bc5c4-18f8-4736-9406-91cb3d02daaa",
-  "activeVersionId": "509bc5c4-18f8-4736-9406-91cb3d02daaa",
-  "versionCounter": 3,
+  "versionId": "f93d7258-1fde-4ab6-aba5-d2ea5c69e00f",
+  "activeVersionId": "f93d7258-1fde-4ab6-aba5-d2ea5c69e00f",
+  "versionCounter": 4,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

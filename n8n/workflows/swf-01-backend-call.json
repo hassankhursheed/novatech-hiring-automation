@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T18:34:43.444Z",
+  "updatedAt": "2026-10-02T19:14:12.092Z",
   "createdAt": "2026-10-01T19:59:21.036Z",
   "id": "aIsZuTp9Z6s1IqLi",
   "name": "SWF-01 Backend Call",
@@ -218,7 +218,7 @@
             {
               "id": "emsg",
               "name": "error_message",
-              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.error?.message ?? $json.error ?? $json.statusMessage ?? \"request failed\") }}",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? $json.statusMessage ?? \"request failed\") }}",
               "type": "string"
             }
           ]
@@ -449,7 +449,7 @@
             {
               "id": "emsg",
               "name": "error_message",
-              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.error?.message ?? $json.error ?? $json.statusMessage ?? \"request failed\") }}",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? $json.statusMessage ?? \"request failed\") }}",
               "type": "string"
             }
           ]
@@ -757,7 +757,7 @@
             {
               "id": "emsg",
               "name": "error_message",
-              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.error?.message ?? $json.error ?? $json.statusMessage ?? \"request failed\") }}",
+              "value": "={{ ($json.statusCode >= 200 && $json.statusCode < 300) ? \"\" : String($json.body?.detail ?? $json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? $json.statusMessage ?? \"request failed\") }}",
               "type": "string"
             }
           ]
@@ -1168,9 +1168,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "0dd92cb7-67e9-4ecd-a78e-3fb9cf6579c3",
-  "activeVersionId": "0dd92cb7-67e9-4ecd-a78e-3fb9cf6579c3",
-  "versionCounter": 3,
+  "versionId": "598a5bc4-0e52-4ff8-996f-63c5164de572",
+  "activeVersionId": "598a5bc4-0e52-4ff8-996f-63c5164de572",
+  "versionCounter": 4,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "updatedAt": "2026-10-02T19:18:18.409Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf05OfferMgmt1",
   "name": "WF-05 Offer Management",
@@ -481,7 +481,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
-            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.error?.message ?? $json.error) : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-05\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-05\", payload: { action: a } }; })() }}"
+            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"step failed\") : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-05\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-05\", payload: { action: a } }; })() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -3267,9 +3267,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "ce6ef4d5-4212-4d56-a1b5-a85d3ad0ab93",
-  "activeVersionId": "ce6ef4d5-4212-4d56-a1b5-a85d3ad0ab93",
-  "versionCounter": 1,
+  "versionId": "f5ba0a0d-0c24-454e-97d6-7386bb7d748a",
+  "activeVersionId": "f5ba0a0d-0c24-454e-97d6-7386bb7d748a",
+  "versionCounter": 2,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

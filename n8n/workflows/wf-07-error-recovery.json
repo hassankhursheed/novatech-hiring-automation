@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "updatedAt": "2026-10-02T19:17:47.893Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf07ErrRecover",
   "name": "WF-07 Error & Recovery",
@@ -495,7 +495,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ (() => { const m = String($json.error?.message ?? $json.error ?? \"replay refused\"); const c = m.match(/^([A-Z][A-Z0-9_]+): (.*)$/); return { code: c ? c[1] : \"REPLAY_REFUSED\", detail: c ? c[2] : m }; })() }}",
+        "responseBody": "={{ (() => { const m = String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"replay refused\"); const c = m.match(/^([A-Z][A-Z0-9_]+): (.*)$/); return { code: c ? c[1] : \"REPLAY_REFUSED\", detail: c ? c[2] : m }; })() }}",
         "options": {
           "responseCode": 409
         }
@@ -970,7 +970,7 @@
             {
               "id": "2e109c24-5296-58d2-ac33-684abab24e62",
               "name": "detail",
-              "value": "={{ $json.error ? \"replay crashed: \" + ($json.error.message || $json.error) : $json.error_id ? \"failed again (error \" + $json.error_id + \")\" : \"re-processed: \" + ($json.outcome || $json.action_outcome || \"ok\") + \" \" + ($json.application_code || \"\") }}",
+              "value": "={{ $json.error ? \"replay crashed: \" + String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"unknown error\") : $json.error_id ? \"failed again (error \" + $json.error_id + \")\" : \"re-processed: \" + ($json.outcome || $json.action_outcome || \"ok\") + \" \" + ($json.application_code || \"\") }}",
               "type": "string"
             }
           ]
@@ -1043,7 +1043,7 @@
             {
               "id": "7224bffa-8c5d-5891-aa28-e736d5f4b3cb",
               "name": "detail",
-              "value": "={{ $json.error ? \"replay crashed: \" + ($json.error.message || $json.error) : ($json.action_outcome || \"no result\") + \": \" + ($json.action_reason || \"\") }}",
+              "value": "={{ $json.error ? \"replay crashed: \" + String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"unknown error\") : ($json.action_outcome || \"no result\") + \": \" + ($json.action_reason || \"\") }}",
               "type": "string"
             }
           ]
@@ -1103,7 +1103,7 @@
             {
               "id": "f79f6d61-4ec2-5349-a4a7-3077c04e14ce",
               "name": "detail",
-              "value": "={{ String($json.error?.message ?? $json.error ?? \"requeue refused\") }}",
+              "value": "={{ String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"requeue refused\") }}",
               "type": "string"
             }
           ]
@@ -1162,7 +1162,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ ({ code: \"RESOLVE_FAILED\", detail: String($json.error?.message ?? $json.error ?? \"could not record the replay result\") }) }}",
+        "responseBody": "={{ ({ code: \"RESOLVE_FAILED\", detail: String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"could not record the replay result\") }) }}",
         "options": {
           "responseCode": 500
         }
@@ -1564,9 +1564,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "6298531d-9fc6-4542-834a-c32fcb2b5fd6",
-  "activeVersionId": "6298531d-9fc6-4542-834a-c32fcb2b5fd6",
-  "versionCounter": 1,
+  "versionId": "aedf1cd8-7be1-4080-8573-cdaaac0ddccf",
+  "activeVersionId": "aedf1cd8-7be1-4080-8573-cdaaac0ddccf",
+  "versionCounter": 2,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],

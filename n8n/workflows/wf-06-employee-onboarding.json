@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "updatedAt": "2026-10-02T19:18:27.175Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf06Onboarding",
   "name": "WF-06 Employee Onboarding",
@@ -337,7 +337,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
-            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.error?.message ?? $json.error) : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-06\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-06\", payload: { action: a } }; })() }}"
+            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"step failed\") : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-06\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-06\", payload: { action: a } }; })() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -971,6 +971,30 @@
       }
     },
     {
+      "id": "76fc55ee-3c43-5b25-a485-d79012eedcbe",
+      "name": "Run Sweep On Demand",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        920
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops/onboarding-sweep",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "webhookId": "c544a23c-dff5-59c7-a5c3-4f6d64d7ca2e"
+    },
+    {
       "id": "79a3a436-1768-5924-ae14-fa1952f790f1",
       "name": "Sweep Context",
       "type": "n8n-nodes-base.set",
@@ -1248,7 +1272,7 @@
         120
       ],
       "parameters": {
-        "content": "## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep**: `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.",
+        "content": "## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep** (or `POST /webhook/ops/onboarding-sweep`, header auth): `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.",
         "width": 620,
         "height": 300,
         "color": 5
@@ -1492,6 +1516,17 @@
         ]
       ]
     },
+    "Run Sweep On Demand": {
+      "main": [
+        [
+          {
+            "node": "Sweep Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Every Hour": {
       "main": [
         [
@@ -1589,10 +1624,10 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "28794558-556c-47a1-8325-ea67e6e6d2cb",
-  "activeVersionId": "28794558-556c-47a1-8325-ea67e6e6d2cb",
-  "versionCounter": 1,
-  "triggerCount": 1,
+  "versionId": "000f4279-556a-42b7-920f-13fc7642048f",
+  "activeVersionId": "000f4279-556a-42b7-920f-13fc7642048f",
+  "versionCounter": 2,
+  "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],
   "shared": [

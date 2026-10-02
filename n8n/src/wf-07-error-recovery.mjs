@@ -54,7 +54,7 @@ export default function build() {
   w.add(respond('Respond 400', 400, '({ code: "ERROR_ID_REQUIRED", detail: "body must contain error_id (uuid)" })'));
   w.add(pg('Begin Replay', 'SELECT * FROM api.begin_error_replay($1::uuid, $2::jsonb)',
     ['$json.error_id', 'JSON.stringify($json.ctx)'], { onError: 'continueErrorOutput' }));
-  w.add(respond('Respond 409', 409, '(() => { const m = String($json.error?.message ?? $json.error ?? "replay refused"); const c = m.match(/^([A-Z][A-Z0-9_]+): (.*)$/); return { code: c ? c[1] : "REPLAY_REFUSED", detail: c ? c[2] : m }; })()'));
+  w.add(respond('Respond 409', 409, '(() => { const m = String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "replay refused"); const c = m.match(/^([A-Z][A-Z0-9_]+): (.*)$/); return { code: c ? c[1] : "REPLAY_REFUSED", detail: c ? c[2] : m }; })()'));
   w.add(pg('Start Replay Log', `SELECT api.start_workflow_execution($1::jsonb, 'REPLAY', 'ERROR', $2) AS run_id`,
     ['JSON.stringify({ ...$("Replay Request").first().json.ctx, correlation_id: $json.correlation_id })', '$json.error_id']));
   w.add(route('Route by Replay Target', '$("Begin Replay").first().json.replay_workflow',
@@ -94,7 +94,7 @@ export default function build() {
   w.connect('Route by Replay Target', 'Replay Candidate Processing', 2);
   w.add(set('Outcome: Candidate Processing', [
     ['replay_ok', x('!$json.error && !$json.error_id && $json.action_outcome !== "FAILED"'), 'boolean'],
-    ['detail', x('$json.error ? "replay crashed: " + ($json.error.message || $json.error) : $json.error_id ? "failed again (error " + $json.error_id + ")" : "re-processed: " + ($json.outcome || $json.action_outcome || "ok") + " " + ($json.application_code || "")')],
+    ['detail', x('$json.error ? "replay crashed: " + String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "unknown error") : $json.error_id ? "failed again (error " + $json.error_id + ")" : "re-processed: " + ($json.outcome || $json.action_outcome || "ok") + " " + ($json.application_code || "")')],
   ]));
   w.connect('Replay Candidate Processing', 'Outcome: Candidate Processing');
 
@@ -106,13 +106,13 @@ export default function build() {
   for (const output of [3, 4, 5, 6, 7]) w.connect('Route by Replay Target', 'Replay Action Handler', output);
   w.add(set('Outcome: Action Handler', [
     ['replay_ok', x('!$json.error && !$json.error_id && ["DONE", "SKIPPED"].includes($json.action_outcome)'), 'boolean'],
-    ['detail', x('$json.error ? "replay crashed: " + ($json.error.message || $json.error) : ($json.action_outcome || "no result") + ": " + ($json.action_reason || "")')],
+    ['detail', x('$json.error ? "replay crashed: " + String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "unknown error") : ($json.action_outcome || "no result") + ": " + ($json.action_reason || "")')],
   ]));
   w.connect('Replay Action Handler', 'Outcome: Action Handler');
 
   w.add(set('Outcome: Not Replayable', [['replay_ok', 'false', 'boolean'], ['detail', x('"no replay handler for " + $("Begin Replay").first().json.replay_workflow')]]));
   w.connect('Route by Replay Target', 'Outcome: Not Replayable', 8);
-  w.add(set('Outcome: Requeue Refused', [['replay_ok', 'false', 'boolean'], ['detail', x('String($json.error?.message ?? $json.error ?? "requeue refused")')]]));
+  w.add(set('Outcome: Requeue Refused', [['replay_ok', 'false', 'boolean'], ['detail', x('String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "requeue refused")')]]));
   w.connect('Requeue Scheduled Action', 'Outcome: Requeue Refused', 1);
 
   w.add(pg('Resolve Error', `SELECT api.resolve_error($1::uuid, $2, $3, $4::jsonb) AS status,
@@ -125,7 +125,7 @@ export default function build() {
   const OUTCOMES = ['Outcome: Requeued', 'Outcome: Intake', 'Outcome: Candidate Processing', 'Outcome: Action Handler', 'Outcome: Not Replayable', 'Outcome: Requeue Refused'];
   w.add(respond('Respond Replay Result', 200, `({ error_id: $("Begin Replay").first().json.error_id, status: $json.status, replay_count: $("Begin Replay").first().json.replay_count, detail: ${JSON.stringify(OUTCOMES)}.map(n => $(n).isExecuted ? $(n).first().json.detail : null).find(Boolean) })`));
   w.connect('Resolve Error', 'Respond Replay Result', 0);
-  w.add(respond('Respond Resolve Failed', 500, '({ code: "RESOLVE_FAILED", detail: String($json.error?.message ?? $json.error ?? "could not record the replay result") })'));
+  w.add(respond('Respond Resolve Failed', 500, '({ code: "RESOLVE_FAILED", detail: String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "could not record the replay result") })'));
   w.connect('Resolve Error', 'Respond Resolve Failed', 1);
 
   w.add(sticky('Overview', '## WF-07 Error & Recovery\n1. **Error Trigger**: the error workflow of every NovaTech workflow. A crash is recorded in the error queue (`api.record_error`, deduplicated by fingerprint) and its run is closed as FAILED.\n2. **Every 5 minutes**: `api.claim_unalerted_errors` → one digest email to `ops.alert_email` (each error alerted once).\n3. **POST /webhook/ops/replay** (header auth, called by the backend for staff): `api.begin_error_replay` → re-run the stored payload in the original workflow → `api.resolve_error` RESOLVED or OPEN. Replays reuse the original keys and ids, so they cannot create duplicates.', { width: 620, height: 300 }));

@@ -1,7 +1,7 @@
 // WF-06 Employee Onboarding: employee record exactly once, simulated account, welcome + orientation, HR/manager
 // notice, completion notice, and an hourly sweep that reminds owners of overdue onboarding tasks.
 import {
-  Workflow, x, ESC, LAYOUT, FMT, sticky, execTrigger, schedule, pg, set, email, when, route, splitOut,
+  Workflow, x, ESC, LAYOUT, FMT, sticky, execTrigger, schedule, webhook, pg, set, email, when, route, splitOut,
   handlerContext, addHandlerTail,
 } from './lib.mjs';
 
@@ -89,6 +89,8 @@ export default function build() {
 
   // ---- hourly sweep: overdue onboarding tasks ------------------------------------------------------------------
   w.add(schedule('Every Hour', { field: 'hours', hoursInterval: 1, triggerAtMinute: 15 }));
+  // Operators (and the scenario runner) can run the sweep immediately; claiming keeps it safe to run any time.
+  w.add(webhook('Run Sweep On Demand', 'ops/onboarding-sweep', { responseMode: 'onReceived' }));
   w.add(set('Sweep Context', [
     ['ctx', x('({ actor_type: "SYSTEM", actor_id: "n8n", workflow_name: "WF-06", workflow_version: "1.0.0", execution_id: $execution.id })'), 'object'],
   ]));
@@ -112,9 +114,10 @@ export default function build() {
   w.add(pg('Finish Sweep', `SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms, $3::int AS reminders`,
     ['JSON.stringify($("Sweep Context").first().json.ctx)', '$input.all().some(i => i.json.status === "FAILED") ? "FAILED" : "SUCCEEDED"', '$input.all().length'],
     { executeOnce: true }));
+  w.connect('Run Sweep On Demand', 'Sweep Context');
   w.chain('Every Hour', 'Sweep Context', 'Claim Overdue Tasks', 'Start Sweep Log', 'Overdue Tasks', 'One Item per Task',
     'Remind Task Owner (SWF-02)', 'Finish Sweep');
 
-  w.add(sticky('Overview', '## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep**: `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.', { width: 620, height: 300 }));
+  w.add(sticky('Overview', '## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep** (or `POST /webhook/ops/onboarding-sweep`, header auth): `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.', { width: 620, height: 300 }));
   return w.toJSON();
 }

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "updatedAt": "2026-10-02T19:18:00.377Z",
   "createdAt": "2026-10-01T20:11:16.857Z",
   "id": "kyyh3d0dVadoBjAF",
   "name": "WF-00 Dispatcher & Scheduler",
@@ -398,7 +398,7 @@
         "operation": "executeQuery",
         "query": "SELECT * FROM api.complete_scheduled_action($1::uuid, $2, $3::jsonb, NULLIF($4, ''), $5::jsonb)",
         "options": {
-          "queryReplacement": "={{ (() => { const a = $(\"Loop Actions\").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? \"FAILED\" : ($json.action_outcome || \"DONE\"); const reason = failedHard ? String($json.error?.message ?? $json.error) : ($json.action_reason || \"\"); return [ a.id, outcome, JSON.stringify({ reason, handler: $prevNode.name }), outcome === \"FAILED\" ? reason : \"\", JSON.stringify({ ...$(\"Build Context\").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })() }}"
+          "queryReplacement": "={{ (() => { const a = $(\"Loop Actions\").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? \"FAILED\" : ($json.action_outcome || \"DONE\"); const reason = failedHard ? String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"sub-workflow failed\") : ($json.action_reason || \"\"); return [ a.id, outcome, JSON.stringify({ reason, handler: $prevNode.name }), outcome === \"FAILED\" ? reason : \"\", JSON.stringify({ ...$(\"Build Context\").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })() }}"
         }
       },
       "credentials": {
@@ -1030,9 +1030,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "a726d426-1b76-4149-b17f-dbf9af6ec84e",
-  "activeVersionId": "a726d426-1b76-4149-b17f-dbf9af6ec84e",
-  "versionCounter": 2,
+  "versionId": "eae3aab0-ea08-47f2-a7ae-2d312e855c67",
+  "activeVersionId": "eae3aab0-ea08-47f2-a7ae-2d312e855c67",
+  "versionCounter": 3,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],
