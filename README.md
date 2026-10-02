@@ -53,6 +53,7 @@ Useful commands:
 ```powershell
 docker compose logs -f backend n8n                       # follow logs
 docker compose --profile test run --rm backend-tests     # lint + unit + API + DB integration tests
+docker compose --profile test run --rm backend-tests python -m tests.scenarios.run   # 23 scenarios end to end
 docker compose run --rm migrate                          # apply new migrations
 docker compose down                                      # stop (data is kept in volumes)
 docker compose down -v                                   # stop AND delete all data (fresh start)
@@ -82,7 +83,9 @@ docs/               architecture, database/ERD, state machine, workflows, reliab
 | [docs/workflows.md](docs/workflows.md) | WF-00…WF-08 and sub-workflows: triggers, steps, owned transitions, scenario coverage |
 | [docs/reliability.md](docs/reliability.md) | Idempotency strategy, error classification, retry policy, dead queue, replay, timers, fault injection |
 | [docs/configuration.md](docs/configuration.md) | Environment variables, business settings, scoring rules |
-| [docs/n8n-setup.md](docs/n8n-setup.md) | First login, credentials, conventions, export/import, hardening |
+| [docs/n8n-setup.md](docs/n8n-setup.md) | First login, credentials, conventions, deploy/export, hardening |
+| [docs/testing.md](docs/testing.md) | Test layers, scenario runner, map of the 23 scenarios |
+| [docs/scenario-report.md](docs/scenario-report.md) | Latest end-to-end run: 23 scenarios + 42 fictional applications, with evidence |
 
 ## Testing
 

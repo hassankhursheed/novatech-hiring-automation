@@ -21,6 +21,7 @@ export const WF = {
   'WF-06': ['ntWf06Onboarding', 'WF-06 Employee Onboarding'],
   'WF-07': ['ntWf07ErrRecover', 'WF-07 Error & Recovery'],
   'WF-08': ['ntWf08Monitoring', 'WF-08 Monitoring & Reporting'],
+  'WF-09': ['ntWf09NotifyApi1', 'WF-09 Notification API'],
   'SWF-01': ['aIsZuTp9Z6s1IqLi', 'SWF-01 Backend Call'],
   'SWF-02': ['zNrGlzM4KLrFVMAo', 'SWF-02 Send Notification'],
   'SWF-03': ['IBNva3yYim0EcUCT', 'SWF-03 Fail & Record Error'],

@@ -64,10 +64,10 @@ class Candidate:
 
 class Harness:
     def __init__(self) -> None:
-        keys = os.environ.get("INTERNAL_API_KEYS", "")
+        keys = os.environ.get("SCENARIO_API_KEY", "")
         self.api_key = keys.split(",")[0].strip()
         if not self.api_key:
-            raise SystemExit("INTERNAL_API_KEYS must be set for the scenario runner")
+            raise SystemExit("SCENARIO_API_KEY (the stack's internal API key) must be set for the scenario runner")
         self.run = uuid.uuid4().hex[:6]
         self.http = httpx.Client(timeout=90)
         self.db = psycopg.connect(os.environ["DATABASE_URL_OWNER_TEST"], row_factory=dict_row, autocommit=True)

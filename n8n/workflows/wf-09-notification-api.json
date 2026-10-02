@@ -1,0 +1,457 @@
+{
+  "updatedAt": "2026-10-02T19:41:19.500Z",
+  "createdAt": "2026-10-02T19:38:54.312Z",
+  "id": "ntWf09NotifyApi1",
+  "name": "WF-09 Notification API",
+  "description": "WF-09: authenticated POST /webhook/ops/notify for backend-originated messages (staff sign-in links); validates the request and sends through SWF-02 (at most once per dedupe key).",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "3d0464ba-bf27-5045-aaeb-c05e897342ac",
+      "name": "Message Requested",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops/notify",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "webhookId": "4f54966c-68ef-5468-a3a9-70a0de6068e6"
+    },
+    {
+      "id": "163a1213-705c-516d-aae6-70c6dd721e30",
+      "name": "Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aeff0a67-ae88-5d38-adb7-cfd5093dae48",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"backend\", workflow_name: \"WF-09\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.headers?.[\"x-correlation-id\"] || \"\" }) }}",
+              "type": "object"
+            },
+            {
+              "id": "9cd91af8-9428-5a75-a826-f29ecdb421a5",
+              "name": "dedupe_key",
+              "value": "={{ String($json.body?.dedupe_key || \"\").slice(0, 200) }}",
+              "type": "string"
+            },
+            {
+              "id": "70ab0bdb-f513-55de-a075-2404febd3791",
+              "name": "template_key",
+              "value": "={{ String($json.body?.template_key || \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "f8003556-a03b-5a5b-aa16-93686c45a2d1",
+              "name": "recipient",
+              "value": "={{ String($json.body?.recipient || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "e1586517-549a-5d6d-ae36-8decba1b9f46",
+              "name": "subject",
+              "value": "={{ String($json.body?.subject || \"\").slice(0, 300) }}",
+              "type": "string"
+            },
+            {
+              "id": "19e7d686-21cd-5061-ae2d-9da3c5f96cda",
+              "name": "html",
+              "value": "={{ String($json.body?.html || \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "1826b828-33b9-5826-a991-99688cf4c742",
+              "name": "entity_type",
+              "value": "={{ String($json.body?.entity_type || \"SYSTEM\").toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "c0099ac5-d1ed-5f6b-adac-245ad7efc6dd",
+              "name": "entity_id",
+              "value": "={{ String($json.body?.entity_id || \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "e285833d-8e50-5534-aadf-89eb17bf6d6b",
+              "name": "application_id",
+              "value": "={{ String($json.body?.application_id || \"\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0531d24c-5d32-5723-a4ee-a1861c46eca9",
+      "name": "Valid Message?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a9aec6e2-5b60-5865-a357-1f239705b46b",
+              "leftValue": "={{ $json.dedupe_key }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            },
+            {
+              "id": "b85678bb-d467-5a5d-a95b-170633261c8c",
+              "leftValue": "={{ /^[a-z][a-z0-9_.]{2,60}$/.test($json.template_key) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            },
+            {
+              "id": "d6e5b745-d9e9-5127-a502-ebe939513cfe",
+              "leftValue": "={{ /^[^@\\s,]+@[^@\\s,]+\\.[^@\\s,]+$/.test($json.recipient) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            },
+            {
+              "id": "c666bd8f-bf8f-5a49-a4a8-84bc68665ab8",
+              "leftValue": "={{ $json.subject }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            },
+            {
+              "id": "7aa477e4-8cea-5ca1-ad75-45790ffcca6a",
+              "leftValue": "={{ $json.html }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ecbb0bf1-9eb0-52a9-aef1-5b324f666960",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ code: \"INVALID_MESSAGE\", detail: \"dedupe_key, template_key (lower.dot_case), one recipient address, subject and html are required\" }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "f75d230a-a36c-556c-a372-c8a8e6eb1f1c",
+      "name": "Send (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1020,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $json.ctx }}",
+            "dedupe_key": "={{ $json.dedupe_key }}",
+            "channel": "EMAIL",
+            "template_key": "={{ $json.template_key }}",
+            "recipient": "={{ $json.recipient }}",
+            "subject": "={{ $json.subject }}",
+            "html": "={{ $json.html }}",
+            "application_id": "={{ $json.application_id }}",
+            "entity_type": "={{ $json.entity_type }}",
+            "entity_id": "={{ $json.entity_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "72661392-dda2-5b7a-aadd-5fca1a8f97af",
+      "name": "Respond Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ status: $json.status, duplicate_suppressed: Boolean($json.duplicate_suppressed) }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "f26c8cdd-4d7b-562b-aa4e-33d9d37d136b",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "parameters": {
+        "content": "## WF-09 Notification API\n`POST /webhook/ops/notify` (header auth, backend only). Body: `dedupe_key`, `template_key`, `recipient`, `subject`, `html`, optional `entity_type` / `entity_id` / `application_id`.\nThe message goes through **SWF-02**, so it is recorded in `ops.notifications`, sent at most once per dedupe key, and uses the same mail credential as every other message. Used for staff sign-in links.",
+        "width": 560,
+        "height": 220,
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "Message Requested": {
+      "main": [
+        [
+          {
+            "node": "Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message": {
+      "main": [
+        [
+          {
+            "node": "Valid Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Message?": {
+      "main": [
+        [
+          {
+            "node": "Send (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Respond Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "f8446b2e-5649-4b1b-8f9b-6417f954215d",
+  "activeVersionId": "f8446b2e-5649-4b1b-8f9b-6417f954215d",
+  "versionCounter": 2,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-02T19:38:54.312Z",
+      "createdAt": "2026-10-02T19:38:54.312Z",
+      "role": "workflow:owner",
+      "workflowId": "ntWf09NotifyApi1",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

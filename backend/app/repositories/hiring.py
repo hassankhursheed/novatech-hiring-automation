@@ -201,5 +201,155 @@ class HiringRepository:
         return str(values.get("company.name") or "the company"), str(values.get("company.careers_email") or "")
 
 
+class StaffDirectory:
+    """Staff identity and the HR portal's read models (lists, detail pages, boards)."""
+
+    def __init__(self, db: Database) -> None:
+        self._db = db
+
+    async def by_email(self, email: str) -> DictRow | None:
+        return await self._db.fetch_one(
+            """SELECT id::text AS staff_id, full_name, email, roles, job_title, is_active
+                 FROM hiring.staff_members WHERE lower(email) = lower(%s)""",
+            (email.strip(),),
+        )
+
+    async def profile(self, staff_id: str) -> DictRow | None:
+        return await self._db.fetch_one(
+            """SELECT id::text AS staff_id, full_name, email, roles, job_title, department, is_active
+                 FROM hiring.staff_members WHERE id = %s""",
+            (staff_id,),
+        )
+
+    async def consume_link(self, token_id: str, purpose: str, subject_id: str, expires_at: Any, ctx: Ctx) -> bool:
+        row = await self._db.fetch_one(
+            "SELECT api.consume_link_token(%s, %s, %s, %s, %s) AS ok",
+            (token_id, purpose, subject_id, expires_at, Jsonb(ctx)),
+        )
+        return bool(row and row["ok"])
+
+    async def applications(
+        self, status: str | None, search: str | None, limit: int, offset: int
+    ) -> list[dict[str, Any]]:
+        pattern = f"%{search.strip()}%" if search and search.strip() else None
+        rows = await self._db.fetch_all(
+            """SELECT a.id::text AS application_id, a.application_code, a.status, a.status_changed_at, a.created_at,
+                      a.application_score, a.interview_score, a.final_score, a.ai_recommendation, a.review_reason,
+                      c.full_name, c.email, p.code AS position_code, p.title AS position_title,
+                      s.stage, s.awaits_human
+                 FROM hiring.applications a
+                 JOIN hiring.candidates c ON c.id = a.candidate_id
+                 JOIN hiring.job_positions p ON p.id = a.job_position_id
+                 JOIN hiring.application_statuses s ON s.code = a.status
+                WHERE (%(status)s::text IS NULL OR a.status = %(status)s)
+                  AND (%(pattern)s::text IS NULL OR c.full_name ILIKE %(pattern)s OR c.email ILIKE %(pattern)s
+                       OR a.application_code ILIKE %(pattern)s)
+                ORDER BY a.status_changed_at DESC
+                LIMIT %(limit)s OFFSET %(offset)s""",
+            {"status": status, "pattern": pattern, "limit": limit, "offset": offset},
+        )
+        return [dict(r) for r in rows]
+
+    async def application_detail(self, application_id: str) -> dict[str, Any]:
+        snapshot = await self._db.fetch_one("SELECT api.application_snapshot(%s::uuid) AS s", (application_id,))
+        if snapshot is None or snapshot["s"] is None:
+            raise NotFoundError("application not found", code="APPLICATION_NOT_FOUND")
+        app: dict[str, Any] = snapshot["s"]
+        many = self._db.fetch_all
+        app["history"] = [
+            dict(r)
+            for r in await many(
+                """SELECT from_status, to_status, reason, actor_type, actor_id, workflow_name, changed_at
+                 FROM hiring.candidate_status_history WHERE application_id = %s ORDER BY id""",
+                (application_id,),
+            )
+        ]
+        app["scores"] = [
+            dict(r)
+            for r in await many(
+                """SELECT scoring_version, score, route, points_awarded, points_possible, breakdown, created_at
+                 FROM hiring.application_scores WHERE application_id = %s ORDER BY created_at DESC""",
+                (application_id,),
+            )
+        ]
+        app["ai_analyses"] = [
+            dict(r)
+            for r in await many(
+                """SELECT status, provider, model, prompt_version, technical_strength, experience_relevance,
+                      communication_indication, missing_skills, summary, recommendation, fallback_reason, attempts,
+                      created_at
+                 FROM hiring.ai_analyses WHERE application_id = %s ORDER BY created_at DESC""",
+                (application_id,),
+            )
+        ]
+        app["interviews"] = [
+            r["s"]
+            for r in await many(
+                """SELECT api.interview_snapshot(i.id) - 'application' AS s FROM hiring.interviews i
+                WHERE i.application_id = %s ORDER BY i.round""",
+                (application_id,),
+            )
+        ]
+        app["feedback"] = [
+            dict(r)
+            for r in await many(
+                """SELECT i.interview_code, f.technical_skills, f.communication, f.problem_solving, f.experience,
+                          f.team_fit,
+                      f.interview_score, f.recommendation, f.comments, f.submitted_at
+                 FROM hiring.interview_feedback f JOIN hiring.interviews i ON i.id = f.interview_id
+                WHERE i.application_id = %s ORDER BY f.submitted_at""",
+                (application_id,),
+            )
+        ]
+        app["offers"] = [
+            r["s"]
+            for r in await many(
+                """SELECT api.offer_snapshot(o.id) - 'application' AS s FROM hiring.offers o
+                WHERE o.application_id = %s ORDER BY o.revision""",
+                (application_id,),
+            )
+        ]
+        employee = await self._db.fetch_one(
+            "SELECT api.employee_snapshot(e.id) AS s FROM hiring.employees e WHERE e.application_id = %s",
+            (application_id,),
+        )
+        app["employee"] = employee["s"] if employee else None
+        app["notifications"] = [
+            dict(r)
+            for r in await many(
+                """SELECT template_key, recipient, status, channel, created_at, sent_at
+                 FROM ops.notifications WHERE application_id = %s ORDER BY created_at""",
+                (application_id,),
+            )
+        ]
+        app["staff_transitions"] = [
+            dict(r)
+            for r in await many(
+                """SELECT t.to_status, t.description FROM hiring.status_transitions t
+                WHERE t.from_status = %s AND 'STAFF' = ANY (t.allowed_actor_types) AND t.managed_by IS NULL
+                ORDER BY t.to_status""",
+                (app["status"],),
+            )
+        ]
+        app["timeline"] = [
+            dict(r)
+            for r in await many(
+                """SELECT occurred_at, source, workflow_name, action, outcome, from_status, to_status, actor,
+                          error_code,
+                      error_message
+                 FROM reporting.trace(%s)""",
+                (app["correlation_id"],),
+            )
+        ]
+        return app
+
+    async def onboarding_board(self) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            """SELECT api.employee_snapshot(e.id) AS s FROM hiring.employees e
+                WHERE e.status = 'ONBOARDING' ORDER BY e.joining_date, e.employee_code"""
+        )
+        return [r["s"] for r in rows]
+
+
 def as_date(value: Any) -> date:
     return value if isinstance(value, date) else date.fromisoformat(str(value))

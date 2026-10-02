@@ -13,6 +13,7 @@ const MODULES = {
   'WF-06': './wf-06-employee-onboarding.mjs',
   'WF-07': './wf-07-error-recovery.mjs',
   'WF-08': './wf-08-monitoring-reporting.mjs',
+  'WF-09': './wf-09-notification-api.mjs',
 };
 
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(MODULES);

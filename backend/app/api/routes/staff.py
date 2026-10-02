@@ -1,18 +1,17 @@
-"""Staff actions for internal tools and the HR portal backend.
+"""Staff actions and read models for the HR portal and internal tools.
 
-Interim authentication: a valid X-API-Key plus `X-Staff-Id`. The browser never holds the API key; the portal
-calls these endpoints server-side and will switch to company SSO (OIDC). The staff member is the actor of every
-database call, so roles, segregation of duties and the state machine are enforced by the database.
+Authentication (see deps.staff_actor): the portal sends the session token from the passwordless email sign-in;
+internal tools send X-API-Key plus X-Staff-Id. The browser never holds the API key. The staff member is the actor of
+every database call, so roles, segregation of duties and the state machine are enforced by the database.
 """
 
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 
-from app.api.deps import get_hiring_repo, get_n8n, staff_id
+from app.api.deps import get_hiring_repo, get_n8n, get_staff_directory, staff_actor
 from app.core.context import get_correlation_id
 from app.core.errors import ConflictError, NotFoundError, UnauthorizedError
-from app.core.security import require_internal_api_key
 from app.domain.hiring_contracts import (
     ApprovalRequest,
     CancelRequest,
@@ -20,10 +19,10 @@ from app.domain.hiring_contracts import (
     OfferTerms,
     TransitionRequest,
 )
-from app.repositories.hiring import HiringRepository
+from app.repositories.hiring import HiringRepository, StaffDirectory
 from app.services.n8n import N8nClient
 
-router = APIRouter(prefix="/v1/staff", tags=["staff"], dependencies=[Depends(require_internal_api_key)])
+router = APIRouter(prefix="/v1/staff", tags=["staff"])
 
 # Read models exposed to staff tools (fixed allow-list of reporting views).
 QUEUES = {
@@ -42,7 +41,7 @@ UuidPath = Annotated[str, Path(pattern=r"^[0-9a-fA-F-]{36}$")]
 
 
 async def staff_ctx(
-    actor: str = Depends(staff_id), repo: HiringRepository = Depends(get_hiring_repo)
+    actor: str = Depends(staff_actor), repo: HiringRepository = Depends(get_hiring_repo)
 ) -> dict[str, Any]:
     if not await repo.staff_exists(actor):
         raise UnauthorizedError("unknown or inactive staff member", code="UNKNOWN_STAFF_ACTOR")
@@ -221,3 +220,36 @@ async def queue(
     if view is None:
         raise NotFoundError(f"unknown queue {name}; use one of {', '.join(QUEUES)}", code="QUEUE_NOT_FOUND")
     return await repo.queue(view, limit)
+
+
+# ---- read models for the HR portal ------------------------------------------------------------------------------
+@router.get("/me", summary="The signed-in staff member")
+async def me(ctx: Ctx = Depends(staff_ctx), directory: StaffDirectory = Depends(get_staff_directory)) -> dict[str, Any]:
+    profile = await directory.profile(ctx["actor_id"])
+    return dict(profile or {})
+
+
+@router.get("/applications", summary="Applications, newest activity first")
+async def applications(
+    status: str | None = Query(default=None, pattern=r"^[A-Z_]{3,40}$"),
+    search: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _: Ctx = Depends(staff_ctx),
+    directory: StaffDirectory = Depends(get_staff_directory),
+) -> list[dict[str, Any]]:
+    return await directory.applications(status, search, limit, offset)
+
+
+@router.get("/applications/{application_id}", summary="Everything about one application, with its full timeline")
+async def application_detail(
+    application_id: UuidPath, _: Ctx = Depends(staff_ctx), directory: StaffDirectory = Depends(get_staff_directory)
+) -> dict[str, Any]:
+    return await directory.application_detail(application_id)
+
+
+@router.get("/onboarding", summary="Employees currently onboarding, with their tasks")
+async def onboarding(
+    _: Ctx = Depends(staff_ctx), directory: StaffDirectory = Depends(get_staff_directory)
+) -> list[dict[str, Any]]:
+    return await directory.onboarding_board()
