@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T18:34:41.952Z",
+  "updatedAt": "2026-10-02T19:15:20.297Z",
   "createdAt": "2026-10-01T20:02:35.586Z",
   "id": "76ahG9hzRP7cuQL4",
   "name": "WF-02 Candidate Processing",
@@ -752,7 +752,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
-            "error": "={{ (() => { const msg = String($json.error?.message ?? $json.error ?? \"persist failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-02\", node_name: \"Persist Application\", error_class: m ? \"NON_RETRYABLE\" : \"UNKNOWN\", error_code: m ? m[1] : \"DB_ERROR\", error_message: msg, entity_type: \"EVENT\", entity_id: $(\"Build Context\").item.json.event_id, replay_workflow: \"WF-02\", payload: { mode: \"intake\", event_id: $(\"Build Context\").item.json.event_id, correlation_id: $(\"Build Context\").item.json.correlation_id, validation: $(\"Build Context\").item.json.validation } }; })() }}"
+            "error": "={{ (() => { const msg = String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"persist failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-02\", node_name: \"Persist Application\", error_class: m ? \"NON_RETRYABLE\" : \"UNKNOWN\", error_code: m ? m[1] : \"DB_ERROR\", error_message: msg, entity_type: \"EVENT\", entity_id: $(\"Build Context\").item.json.event_id, replay_workflow: \"WF-02\", payload: { mode: \"intake\", event_id: $(\"Build Context\").item.json.event_id, correlation_id: $(\"Build Context\").item.json.correlation_id, validation: $(\"Build Context\").item.json.validation } }; })() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -973,9 +973,9 @@
   },
   "nodeGroups": [],
   "pinData": null,
-  "versionId": "d663161e-fc44-4e68-a3c4-f3f1d3173807",
-  "activeVersionId": "d663161e-fc44-4e68-a3c4-f3f1d3173807",
-  "versionCounter": 2,
+  "versionId": "3fa5fe06-be45-4f7b-9a98-738c686acb45",
+  "activeVersionId": "3fa5fe06-be45-4f7b-9a98-738c686acb45",
+  "versionCounter": 3,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

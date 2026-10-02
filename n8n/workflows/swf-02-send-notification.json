@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T18:34:44.239Z",
+  "updatedAt": "2026-10-02T19:14:26.232Z",
   "createdAt": "2026-10-01T19:55:17.607Z",
   "id": "zNrGlzM4KLrFVMAo",
   "name": "SWF-02 Send Notification",
@@ -282,7 +282,7 @@
         "operation": "executeQuery",
         "query": "SELECT api.finish_notification($1::uuid, 'FAILED', NULL, $2, $3::jsonb) AS status",
         "options": {
-          "queryReplacement": "={{ [ $(\"Claim Notification\").item.json.notification_id, ($json.error?.message || $json.error || \"send failed\").toString(), JSON.stringify($(\"When Called by Workflow\").item.json.ctx) ] }}"
+          "queryReplacement": "={{ [ $(\"Claim Notification\").item.json.notification_id, String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"send failed\"), JSON.stringify($(\"When Called by Workflow\").item.json.ctx) ] }}"
         }
       },
       "credentials": {
@@ -398,9 +398,9 @@
   },
   "nodeGroups": [],
   "pinData": null,
-  "versionId": "a333b2c5-8f72-402b-9243-215f09a54a95",
-  "activeVersionId": "a333b2c5-8f72-402b-9243-215f09a54a95",
-  "versionCounter": 2,
+  "versionId": "c396c029-1411-4b06-9329-cfe4e738a7b1",
+  "activeVersionId": "c396c029-1411-4b06-9329-cfe4e738a7b1",
+  "versionCounter": 3,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T21:03:08.564Z",
+  "updatedAt": "2026-10-02T19:15:06.830Z",
   "createdAt": "2026-10-01T20:04:39.236Z",
   "id": "5ffc9mQNtFMFyUwW",
   "name": "WF-01 Application Intake",
@@ -642,9 +642,9 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify(String($json.error?.message ?? $json.error ?? \"\").includes(\"IDEMPOTENCY_KEY_REUSED\") ? { code: \"IDEMPOTENCY_KEY_REUSED\", detail: \"This Idempotency-Key was already used with a different payload.\", retryable: false } : { code: \"TEMPORARILY_UNAVAILABLE\", detail: \"The application could not be stored. Please retry with the same Idempotency-Key.\", retryable: true }) }}",
+        "responseBody": "={{ JSON.stringify(String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"\").includes(\"IDEMPOTENCY_KEY_REUSED\") ? { code: \"IDEMPOTENCY_KEY_REUSED\", detail: \"This Idempotency-Key was already used with a different payload.\", retryable: false } : { code: \"TEMPORARILY_UNAVAILABLE\", detail: \"The application could not be stored. Please retry with the same Idempotency-Key.\", retryable: true }) }}",
         "options": {
-          "responseCode": "={{ String($json.error?.message ?? $json.error ?? \"\").includes(\"IDEMPOTENCY_KEY_REUSED\") ? 409 : 503 }}"
+          "responseCode": "={{ String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"\").includes(\"IDEMPOTENCY_KEY_REUSED\") ? 409 : 503 }}"
         }
       }
     },
@@ -892,9 +892,9 @@
   },
   "nodeGroups": [],
   "pinData": null,
-  "versionId": "35ae2af3-c05c-49a6-9fb2-b7a2365184c5",
-  "activeVersionId": "35ae2af3-c05c-49a6-9fb2-b7a2365184c5",
-  "versionCounter": 3,
+  "versionId": "982c4dbd-6f91-4738-8380-f98ebcf695b5",
+  "activeVersionId": "982c4dbd-6f91-4738-8380-f98ebcf695b5",
+  "versionCounter": 4,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],

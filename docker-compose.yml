@@ -146,6 +146,11 @@ services:
       APP_ENV: test
       DATABASE_URL_TEST: postgresql://backend_app:${NOVATECH_BACKEND_DB_PASSWORD}@db:5432/novatech
       DATABASE_URL_OWNER_TEST: postgresql://novatech_owner:${NOVATECH_OWNER_PASSWORD}@db:5432/novatech
+      # Scenario runner (python -m tests.scenarios.run) drives the running stack and writes reports/
+      INTERNAL_API_KEYS: ${INTERNAL_API_KEYS}
+      SCENARIO_REPORT_DIR: /app/reports
+    volumes:
+      - ./reports:/app/reports
     depends_on:
       seed:
         condition: service_completed_successfully
