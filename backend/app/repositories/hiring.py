@@ -121,7 +121,8 @@ class HiringRepository:
     async def offer_snapshot(self, offer_id: str) -> dict[str, Any]:
         row = await self._db.fetch_one(
             """SELECT api.offer_snapshot(o.id) AS offer,
-                      (o.created_at AT TIME ZONE hiring.company_timezone())::date AS issued_on
+                      (o.created_at AT TIME ZONE
+                         (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone'))::date AS issued_on
                  FROM hiring.offers o WHERE o.id = %s""",
             (offer_id,),
         )
