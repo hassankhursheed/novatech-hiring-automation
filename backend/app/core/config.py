@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-LLMProvider = Literal["anthropic", "openai", "mistral", "google", "none"]
+LLMProvider = Literal["anthropic", "openai", "mistral", "google", "stub", "none"]
 
 
 class Settings(BaseSettings):
@@ -68,6 +68,8 @@ class Settings(BaseSettings):
         if self.app_env == "production":
             # Fault injection must never be reachable in production, whatever the env file says.
             self.fault_injection_enabled = False
+            if self.llm_provider == "stub":
+                raise ValueError("LLM_PROVIDER=stub is for demos and tests; configure a real provider or 'none'")
             if not self.internal_api_keys:
                 raise ValueError("INTERNAL_API_KEYS must be set in production")
             if any(len(k.get_secret_value()) < 24 for k in self.internal_api_keys):

@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.ai.analyzer import CandidateAnalyzer
-from app.ai.llm import LangChainStructuredLLM
+from app.ai.llm import LangChainStructuredLLM, StructuredLLM
 from app.ai.report_writer import DailySummaryWire, ReportWriter
 from app.ai.schemas import CandidateAnalysisWire
+from app.ai.stub import StubStructuredLLM
 from app.api.routes import health, intake, portal, screening, staff, workflow_support
 from app.core.config import Settings, get_settings
 from app.core.db import Database
@@ -34,11 +35,16 @@ _PROVIDER_KEY_ENV = {
 }
 
 
-def _build_llm(settings: Settings, schema: type[BaseModel], run_name: str) -> LangChainStructuredLLM | None:
+def _build_llm(settings: Settings, schema: type[BaseModel], run_name: str) -> StructuredLLM | None:
     """The configured LLM, or None when AI is disabled or misconfigured (callers then fall back)."""
     if settings.llm_provider == "none":
         log.warning("ai_disabled", feature=run_name, reason="LLM_PROVIDER=none")
         return None
+    if settings.llm_provider == "stub":
+        log.warning(
+            "ai_stub", feature=run_name, reason="LLM_PROVIDER=stub: deterministic offline model (not for production)"
+        )
+        return StubStructuredLLM(schema)
     key_env = _PROVIDER_KEY_ENV[settings.llm_provider]
     if not os.environ.get(key_env, "").strip():
         log.warning("ai_disabled", feature=run_name, reason=f"{key_env} is not set")
