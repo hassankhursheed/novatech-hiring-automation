@@ -3,15 +3,17 @@
 import uuid
 from collections.abc import Awaitable, Callable
 
-from fastapi import Header, Request, Security
+from fastapi import Depends, Header, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.ai.analyzer import CandidateAnalyzer
 from app.ai.report_writer import ReportWriter
+from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import UnauthorizedError
 from app.core.links import LinkClaims, LinkPurpose, LinkSigner
-from app.repositories.hiring import HiringRepository
+from app.core.security import require_internal_api_key
+from app.repositories.hiring import HiringRepository, StaffDirectory
 from app.repositories.reference import ReferenceRepository
 from app.services.n8n import N8nClient
 from app.services.storage import Storage
@@ -30,6 +32,11 @@ def get_reference_repo(request: Request) -> ReferenceRepository:
 def get_hiring_repo(request: Request) -> HiringRepository:
     repo: HiringRepository = request.app.state.hiring_repo
     return repo
+
+
+def get_staff_directory(request: Request) -> StaffDirectory:
+    directory: StaffDirectory = request.app.state.staff_directory
+    return directory
 
 
 def get_storage(request: Request) -> Storage:
@@ -74,10 +81,24 @@ def link_claims(*purposes: LinkPurpose) -> Callable[..., Awaitable[LinkClaims]]:
     return dependency
 
 
-async def staff_id(
-    x_staff_id: str = Header(description="Id of the staff member performing the action (interim, until SSO)"),
+async def staff_actor(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
+    x_api_key: str | None = Header(default=None, include_in_schema=False),
+    x_staff_id: str | None = Header(default=None, description="Staff member id (internal tools with X-API-Key)"),
+    settings: Settings = Depends(get_settings),
 ) -> str:
-    """Staff identity for internal tools. Only reachable with a valid X-API-Key (checked on the router)."""
+    """The staff member acting. Two ways in:
+
+    * the HR portal: `Authorization: Bearer <session>` from the email sign-in (purpose STAFF_SESSION);
+    * internal tools and server-side callers: a valid `X-API-Key` plus `X-Staff-Id`.
+    Either way the database re-checks that the staff member is active and allowed to act.
+    """
+    if credentials is not None and credentials.credentials:
+        return get_link_signer(request).verify(credentials.credentials, {LinkPurpose.STAFF_SESSION}).subject_id
+    require_internal_api_key(x_api_key, settings)
+    if not x_staff_id:
+        raise UnauthorizedError("sign in, or send X-API-Key with X-Staff-Id", code="STAFF_AUTH_REQUIRED")
     try:
         return str(uuid.UUID(x_staff_id))
     except ValueError as exc:

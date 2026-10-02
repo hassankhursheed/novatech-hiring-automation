@@ -4,6 +4,8 @@
             instead of at the next one-minute tick. Best effort: if n8n is down, the schedule still picks
             the work up, so a failed kick is logged and never surfaces to the person.
 * replay(): asks WF-07 to replay one error-queue entry on behalf of a staff member.
+* notify(): sends one message through WF-09 / SWF-02 (the only place that knows the mail provider), at most once
+            per dedupe key. Used for staff sign-in links.
 """
 
 from typing import Any
@@ -48,6 +50,20 @@ class N8nClient:
             return True
         except httpx.HTTPError as exc:
             log.warning("n8n_kick_failed", reason=reason, error=type(exc).__name__)
+            return False
+
+    async def notify(self, message: dict[str, Any]) -> bool:
+        if not self.enabled:
+            log.warning("n8n_notify_skipped", reason="n8n is not configured", template=message.get("template_key"))
+            return False
+        try:
+            response = await self._client.post(
+                f"{self._base}/webhook/ops/notify", json=message, headers=self._headers(), timeout=30.0
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPError as exc:
+            log.error("n8n_notify_failed", template=message.get("template_key"), error=type(exc).__name__)
             return False
 
     async def replay(self, error_id: str, staff_id: str) -> dict[str, Any]:

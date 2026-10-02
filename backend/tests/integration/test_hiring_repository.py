@@ -16,7 +16,7 @@ from psycopg.types.json import Jsonb
 
 from app.api.routes.staff import QUEUES
 from app.core.errors import NotFoundError
-from app.repositories.hiring import HiringRepository
+from app.repositories.hiring import HiringRepository, StaffDirectory
 
 pytestmark = pytest.mark.db
 
@@ -196,3 +196,25 @@ async def test_staff_actions_and_read_models(db: TransactionDatabase, repo: Hiri
     assert company and "@" in careers
     with pytest.raises(NotFoundError):
         await repo.error_entry(str(uuid.uuid4()))
+
+
+async def test_portal_read_models_and_single_use_links(db: TransactionDatabase, repo: HiringRepository) -> None:
+    directory = StaffDirectory(db)  # type: ignore[arg-type]
+    app_id, _ = await shortlisted(db)
+    await call(db, "SELECT * FROM api.create_interview_invitation(%s, %s)", app_id, SYSTEM)
+
+    detail = await directory.application_detail(app_id)
+    assert detail["status"] == "SHORTLISTED" and detail["history"] and detail["scores"]
+    assert detail["interviews"] and detail["timeline"] and isinstance(detail["staff_transitions"], list)
+    assert any(t["to_status"] == "REJECTED" for t in detail["staff_transitions"])
+    listed = await directory.applications("SHORTLISTED", detail["application_code"], 10, 0)
+    assert [r["application_id"] for r in listed] == [app_id]
+    assert isinstance(await directory.onboarding_board(), list)
+
+    staff = await directory.by_email("SANA.MALIK@novatech.example")
+    assert staff is not None and staff["staff_id"] == SANA_HR
+    assert (await directory.profile(SANA_HR) or {}).get("full_name") == "Sana Malik"
+    token_id = uuid.uuid4().hex
+    ctx = {"actor_type": "STAFF", "actor_id": SANA_HR, "workflow_name": "PORTAL"}
+    assert await directory.consume_link(token_id, "STAFF_LOGIN", SANA_HR, "2099-01-01T00:00:00Z", ctx)
+    assert not await directory.consume_link(token_id, "STAFF_LOGIN", SANA_HR, "2099-01-01T00:00:00Z", ctx)

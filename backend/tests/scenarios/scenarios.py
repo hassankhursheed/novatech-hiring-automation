@@ -229,7 +229,7 @@ def s03(p: Proof) -> None:
     h.settle()
     p.check(h.event(second)["outcome"] == "DUPLICATE", "second submission classified DUPLICATE")
     apps = h.q(
-        "SELECT id FROM hiring.applications a JOIN hiring.candidates c ON c.id = a.candidate_id WHERE c.email = %s",
+        "SELECT a.id FROM hiring.applications a JOIN hiring.candidates c ON c.id = a.candidate_id WHERE c.email = %s",
         payload["email"],
     )
     p.check(len(apps) == 1, "still exactly one application for the candidate")

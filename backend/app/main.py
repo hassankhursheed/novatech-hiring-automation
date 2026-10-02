@@ -13,14 +13,14 @@ from app.ai.llm import LangChainStructuredLLM, StructuredLLM
 from app.ai.report_writer import DailySummaryWire, ReportWriter
 from app.ai.schemas import CandidateAnalysisWire
 from app.ai.stub import StubStructuredLLM
-from app.api.routes import health, intake, portal, screening, staff, workflow_support
+from app.api.routes import auth, health, intake, portal, screening, staff, workflow_support
 from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import register_exception_handlers
 from app.core.links import LinkSigner
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import CorrelationAndLoggingMiddleware
-from app.repositories.hiring import HiringRepository
+from app.repositories.hiring import HiringRepository, StaffDirectory
 from app.repositories.reference import ReferenceRepository
 from app.services.n8n import N8nClient
 from app.services.storage import LocalStorage
@@ -67,6 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.db = db
         app.state.reference_repo = ReferenceRepository(db)
         app.state.hiring_repo = HiringRepository(db)
+        app.state.staff_directory = StaffDirectory(db)
         app.state.storage = LocalStorage(settings.storage_dir)
         app.state.analyzer = CandidateAnalyzer(_build_llm(settings, CandidateAnalysisWire, "candidate_analysis"))
         app.state.report_writer = ReportWriter(_build_llm(settings, DailySummaryWire, "daily_report_summary"))
@@ -120,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(workflow_support.router)
     app.include_router(portal.router)
     app.include_router(staff.router)
+    app.include_router(auth.router)
     return app
 
 

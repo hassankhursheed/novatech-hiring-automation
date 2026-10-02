@@ -134,6 +134,23 @@ services:
       start_period: 20s
     networks: [app]
 
+  # ------------------------------------------------------------------------------------------
+  # Portal (React + TypeScript): careers form, candidate and staff link pages, HR portal
+  # ------------------------------------------------------------------------------------------
+  portal:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${PORTAL_API_URL:-http://localhost:8000}
+        VITE_INTAKE_URL: ${PORTAL_INTAKE_URL:-http://localhost:5678/webhook/applications}
+    image: novatech/portal:${APP_VERSION:-0.1.0}
+    <<: [*restart, *logging]
+    environment:
+      PORTAL_CONNECT_SRC: ${PORTAL_CONNECT_SRC:-http://localhost:8000 http://localhost:5678}
+    ports:
+      - "127.0.0.1:${PORTAL_PORT:-5173}:8080"
+    networks: [app]
+
   # Test runner (profile "test"): unit + API + database integration tests against the running DB.
   #   docker compose --profile test run --rm backend-tests
   # Integration tests run inside rolled-back transactions and leave no data behind.
@@ -147,7 +164,7 @@ services:
       DATABASE_URL_TEST: postgresql://backend_app:${NOVATECH_BACKEND_DB_PASSWORD}@db:5432/novatech
       DATABASE_URL_OWNER_TEST: postgresql://novatech_owner:${NOVATECH_OWNER_PASSWORD}@db:5432/novatech
       # Scenario runner (python -m tests.scenarios.run) drives the running stack and writes reports/
-      INTERNAL_API_KEYS: ${INTERNAL_API_KEYS}
+      SCENARIO_API_KEY: ${INTERNAL_API_KEYS}  # first key is used; unit tests keep their own fake keys
       SCENARIO_REPORT_DIR: /app/reports
     volumes:
       - ./reports:/app/reports

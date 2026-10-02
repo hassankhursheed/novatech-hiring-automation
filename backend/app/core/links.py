@@ -34,6 +34,8 @@ class LinkPurpose(enum.StrEnum):
     OFFER_RESPONSE = "OFFER_RESPONSE"  # candidate views, downloads and answers an offer
     INTERVIEW_FEEDBACK = "INTERVIEW_FEEDBACK"  # interviewer submits the scorecard
     OFFER_APPROVAL = "OFFER_APPROVAL"  # approver approves or rejects one offer level
+    STAFF_LOGIN = "STAFF_LOGIN"  # single-use sign-in link emailed to a staff member (15 minutes)
+    STAFF_SESSION = "STAFF_SESSION"  # portal session issued in exchange for a sign-in link (never emailed)
 
     @property
     def actor_type(self) -> str:
@@ -46,6 +48,8 @@ class LinkPurpose(enum.StrEnum):
             LinkPurpose.OFFER_RESPONSE: "candidate/offer",
             LinkPurpose.INTERVIEW_FEEDBACK: "staff/feedback",
             LinkPurpose.OFFER_APPROVAL: "staff/approval",
+            LinkPurpose.STAFF_LOGIN: "staff/login",
+            LinkPurpose.STAFF_SESSION: "staff",
         }[self]
 
 

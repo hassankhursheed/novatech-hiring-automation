@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # Signed links in emails (candidate slot/offer pages, interviewer feedback, offer approval).
     link_signing_secret: SecretStr | None = None
     link_max_ttl_days: int = Field(default=30, ge=1, le=90)
+    staff_login_link_minutes: int = Field(default=15, ge=5, le=60)
+    staff_session_hours: int = Field(default=8, ge=1, le=24)
 
     # n8n webhooks the backend calls (dispatcher kick, error replay). Empty disables the calls.
     n8n_base_url: str = "http://n8n:5678"
