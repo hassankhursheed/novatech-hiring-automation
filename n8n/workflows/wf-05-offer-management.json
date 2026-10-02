@@ -1,0 +1,3300 @@
+{
+  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "createdAt": "2026-10-01T21:02:46.801Z",
+  "id": "ntWf05OfferMgmt1",
+  "name": "WF-05 Offer Management",
+  "description": "WF-05: offer drafting, L1/L2 approval requests (signed links), offer letter PDF + sending, reminders, expiry, negotiation and closure notices.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "60729fc1-5510-55d6-a4f2-d301db488486",
+      "name": "When Called by Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "action",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f841a4f5-5d26-52ef-acf2-08d06f19a44c",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b3a2db4d-8b8a-5f29-af8e-fe15008d62b3",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-05\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.action.correlation_id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "d04a2b32-4bf3-5dff-a65a-35bc16f9ddbc",
+              "name": "action",
+              "value": "={{ $json.action }}",
+              "type": "object"
+            },
+            {
+              "id": "eb62a50c-63cd-5199-a2d3-4061b015a35d",
+              "name": "application_id",
+              "value": "={{ $json.action.application_id || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e0a2f874-580a-5677-a5c8-5e06f9e29efb",
+              "name": "entity_type",
+              "value": "={{ $json.action.entity_type || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7bea0c12-e153-5b79-a619-447b242598e0",
+              "name": "entity_id",
+              "value": "={{ $json.action.entity_id || \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b7c433ce-560e-5284-a29e-9e290dd5ced5",
+      "name": "Start Log & Load State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', $2, $3) AS run_id,\n       api.application_snapshot(coalesce(NULLIF($4, '')::uuid, o.application_id)) AS app,\n       CASE WHEN o.id IS NOT NULL THEN api.offer_snapshot(o.id) END AS offer,\n       api.test_directive($5) AS fault_inject,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone') AS timezone,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND 'HR_ADMIN' = ANY (s.roles)) AS hr_emails\n  FROM (SELECT 1) AS one\n  LEFT JOIN LATERAL (\n    SELECT o.id, o.application_id FROM hiring.offers o\n     WHERE CASE WHEN $2 = 'OFFER' THEN o.id = NULLIF($3, '')::uuid ELSE o.application_id = NULLIF($4, '')::uuid END\n     ORDER BY o.revision DESC LIMIT 1) AS o ON true",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.entity_type, $json.entity_id, $json.application_id, $json.ctx.correlation_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "9dd61426-1def-531a-a4b1-cdea09e5262b",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "PREPARE_OFFER",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9c0d620a-06db-53f5-ac98-34eb36681e9f",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "PREPARE_OFFER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "REQUEST_OFFER_APPROVAL",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "44336e68-8592-593a-ad0d-c365f8e0678b",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "REQUEST_OFFER_APPROVAL"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "SEND_OFFER",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ffc1eaf0-c9f7-5184-a006-eadd1741b27d",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "SEND_OFFER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "OFFER_REMINDER",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7c38210f-b087-5e3f-a180-c2ce5a355d42",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "OFFER_REMINDER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "OFFER_FINAL_REMINDER",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f51b2522-0b66-501a-a8cb-a76ef2d88933",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "OFFER_FINAL_REMINDER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "OFFER_EXPIRY",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bf4fb5a3-8d3e-5700-a10f-c4358c04050d",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "OFFER_EXPIRY"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "NOTIFY_NEGOTIATION",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "da8c26ff-a043-5e59-a752-5cc38082eb3f",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NOTIFY_NEGOTIATION"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "NOTIFY_OFFER_CLOSED",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bedd1cd1-518c-5e1c-a9cc-e4de895ef4a2",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NOTIFY_OFFER_CLOSED"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unhandled"
+        }
+      }
+    },
+    {
+      "id": "c2964e3a-d0c4-54c2-ad9d-40427efc4380",
+      "name": "Finish & Return",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3360,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms, $3 AS action_outcome, $4 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").first().json.ctx), ({ DONE: \"SUCCEEDED\", SKIPPED: \"SKIPPED\" })[$json.action_outcome] || \"FAILED\", $json.action_outcome, $json.action_reason ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "68a662e8-1a70-55dd-a69d-17ad2c56d049",
+      "name": "Skip: No Longer Applies",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fe555ff1-ebf8-5edb-a54a-a48f1105f5d0",
+              "name": "action_outcome",
+              "value": "SKIPPED",
+              "type": "string"
+            },
+            {
+              "id": "abd53273-4dc1-5a51-ad56-68cf07cb810a",
+              "name": "action_reason",
+              "value": "={{ (() => { const s = $(\"Start Log & Load State\").first().json; const parts = []; if (s.app) parts.push(\"application \" + s.app.status); for (const k of [\"interview\", \"offer\", \"employee\"]) if (s[k]) parts.push(k + \" \" + s[k].status); return $(\"Build Context\").first().json.action.action_type + \" no longer applies (\" + (parts.join(\", \") || \"entity missing\") + \")\"; })() }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1ee27cd0-4af0-574e-a1c7-d4107fa14b59",
+      "name": "Result: Notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3100,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b359a5a9-7e0b-5f71-ada4-e7880b097c99",
+              "name": "action_outcome",
+              "value": "={{ [\"Ask HR to Revise (SWF-02)\", \"Request Approval (SWF-02)\", \"Send Offer (SWF-02)\", \"Send Offer Reminder (SWF-02)\", \"Notify HR of Negotiation (SWF-02)\", \"Acknowledge Negotiation (SWF-02)\", \"Notify HR of Closure (SWF-02)\", \"Close With Candidate (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c31a272b-181f-5170-aec1-1f9928611a06",
+              "name": "action_reason",
+              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Ask HR to Revise (SWF-02)\", \"Request Approval (SWF-02)\", \"Send Offer (SWF-02)\", \"Send Offer Reminder (SWF-02)\", \"Notify HR of Negotiation (SWF-02)\", \"Acknowledge Negotiation (SWF-02)\", \"Notify HR of Closure (SWF-02)\", \"Close With Candidate (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e12e3eaa-1290-5fc5-adf1-4ed935f25987",
+      "name": "Retryable Failure?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2840,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cf54e308-99c1-53a3-aecd-1f61278fea30",
+              "leftValue": "={{ Boolean($json.error_class === \"RETRYABLE\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f19d9454-316c-5d86-a009-5ac5921be63a",
+      "name": "Result: Retry Later",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3100,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "38c67552-2230-53ea-ae50-167f1398bb32",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "16ae6db3-c36a-55d9-a039-98ac2dd5cba9",
+              "name": "action_reason",
+              "value": "={{ ($json.error_code || \"RETRYABLE\") + \": \" + ($json.error_message || \"temporary failure\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "270933ab-fd91-511c-a2ea-0902216f7ae3",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3100,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.error?.message ?? $json.error) : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-05\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-05\", payload: { action: a } }; })() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "25b08dd9-6ee2-553e-a6a3-cb04ad5d8272",
+      "name": "Result: Moved to Error Queue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3360,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "94f4101d-aade-583e-a311-a83c633784ef",
+              "name": "action_outcome",
+              "value": "DONE",
+              "type": "string"
+            },
+            {
+              "id": "1c6fc7e1-cba5-5a54-afe5-7f0f8695d74b",
+              "name": "action_reason",
+              "value": "={{ \"permanent failure moved to the error queue (\" + $json.error_id + \")\" }}",
+              "type": "string"
+            },
+            {
+              "id": "1e66ee86-8183-53b1-a029-45b7c71702b8",
+              "name": "error_id",
+              "value": "={{ $json.error_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "42971e17-c706-5bf0-ad68-6c6149820181",
+      "name": "Selected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a2314743-b73a-5737-a5ee-7c8691f047fa",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.app?.status === \"SELECTED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "dc1cf849-0b5b-5f19-a024-9caf36be493b",
+      "name": "Draft Offer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.create_offer($1::uuid, '{}'::jsonb, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Start Log & Load State\").first().json.app.application_id, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "25f756ec-fdd7-567e-a65c-5381b3b62cff",
+      "name": "Revision Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1800,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "49d10d51-c133-55e1-aa4d-2020f504ac8c",
+              "leftValue": "={{ Boolean($json.status === \"REVISION_REQUIRED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c9af08fa-469a-5cec-a6b2-ab3a40afc1ca",
+      "name": "Ask HR to Revise (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2060,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.revision_required:\" + $(\"Draft Offer\").first().json.offer_id }}",
+            "channel": "EMAIL",
+            "template_key": "offer.revision_required",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.hr_emails }}",
+            "subject": "={{ \"[Action needed] Revise the offer for \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const o = s.offer || {}; const rejected = (o.approvals || []).find(a => a.decision === \"REJECTED\"); return layout(\"<p>The last offer for <b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.position.title) + \", \" + esc(s.app.application_code) + \") was rejected by an approver\" + (rejected ? \" at level \" + rejected.level : \"\") + \".</p><p>The system will not re-draft it automatically. Please revise the terms (for example the salary) and submit a new revision; it will go through approval again.</p>\", \"Offer \" + esc(o.offer_code || \"\")); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Draft Offer\").first().json.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "9302d9ac-dbfb-547b-acd8-f9410d7dc3bf",
+      "name": "Result: Offer Drafted",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2060,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3f373bdd-5e2a-557a-af40-8f25b2893e9f",
+              "name": "action_outcome",
+              "value": "DONE",
+              "type": "string"
+            },
+            {
+              "id": "41d27877-3b1c-597b-aaba-714c0541f23f",
+              "name": "action_reason",
+              "value": "={{ \"offer \" + $(\"Draft Offer\").first().json.offer_code + \" \" + ($(\"Draft Offer\").first().json.created ? \"drafted\" : \"already open\") + \" (\" + $(\"Draft Offer\").first().json.required_approval_levels + \" approval level(s))\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7a83ec50-3e78-5c0e-a381-e3c83b74c617",
+      "name": "Awaiting Approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "aa8c6e27-a11f-5d79-ad60-6a4bda61aabe",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.offer?.status === \"PENDING_APPROVAL\" && $(\"Start Log & Load State\").first().json.offer?.next_level) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e0430733-b364-509a-ab8f-caf99f0c49ca",
+      "name": "Approver Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1540,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "95cd3ab6-c485-5cc8-a936-435d96e3b470",
+              "leftValue": "={{ Boolean(($(\"Start Log & Load State\").first().json.offer.next_approvers || []).find(a => a.id === $(\"Start Log & Load State\").first().json.offer.reporting_manager?.id) || ($(\"Start Log & Load State\").first().json.offer.next_approvers || [])[0]) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9c541fd2-05b9-5dc9-a3b4-8a2fd10e2bd6",
+      "name": "No Approver Configured",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1800,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "af2795d7-1a5c-5aac-abfe-5a6835a5a9fd",
+              "name": "error_class",
+              "value": "NON_RETRYABLE",
+              "type": "string"
+            },
+            {
+              "id": "5f09489a-ffd2-51a0-a557-5eb9af641b37",
+              "name": "error_code",
+              "value": "NO_APPROVER_AVAILABLE",
+              "type": "string"
+            },
+            {
+              "id": "ad667258-ab61-5b0f-aac9-dfc670c79532",
+              "name": "error_message",
+              "value": "={{ \"no active staff member can approve level \" + $(\"Start Log & Load State\").first().json.offer.next_level + \" of offer \" + $(\"Start Log & Load State\").first().json.offer.offer_code + \" (role APPROVER_L\" + $(\"Start Log & Load State\").first().json.offer.next_level + \", not the creator, not a previous approver)\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e71b0b2d-2919-5e05-a5ca-0c5465ecd88f",
+      "name": "Approval Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"OFFER_APPROVAL\", subject_id: (($(\"Start Log & Load State\").first().json.offer.next_approvers || []).find(a => a.id === $(\"Start Log & Load State\").first().json.offer.reporting_manager?.id) || ($(\"Start Log & Load State\").first().json.offer.next_approvers || [])[0]).id, entity_id: $(\"Start Log & Load State\").first().json.offer.offer_id, expires_at: DateTime.now().plus({ days: 7 }).toISO() }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "e904f8df-f3e2-55bc-a61a-2236061735ba",
+      "name": "Approval Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2060,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1db88c0e-630a-5c00-a47c-0ecb357aa108",
+      "name": "Request Approval (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.approval_request:\" + $(\"Start Log & Load State\").first().json.offer.offer_id + \":L\" + $(\"Start Log & Load State\").first().json.offer.next_level }}",
+            "channel": "EMAIL",
+            "template_key": "offer.approval_request",
+            "recipient": "={{ (($(\"Start Log & Load State\").first().json.offer.next_approvers || []).find(a => a.id === $(\"Start Log & Load State\").first().json.offer.reporting_manager?.id) || ($(\"Start Log & Load State\").first().json.offer.next_approvers || [])[0]).email }}",
+            "subject": "={{ \"[Approval L\" + $(\"Start Log & Load State\").first().json.offer.next_level + \"] Offer \" + $(\"Start Log & Load State\").first().json.offer.offer_code + \" for \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const money = (v, c) => (c || \"PKR\") + \" \" + Number(v).toLocaleString(\"en-US\"); const s = $(\"Start Log & Load State\").first().json; const o = s.offer; const a = ($(\"Start Log & Load State\").first().json.offer.next_approvers || []).find(a => a.id === $(\"Start Log & Load State\").first().json.offer.reporting_manager?.id) || ($(\"Start Log & Load State\").first().json.offer.next_approvers || [])[0]; return layout(\"<p>Hi \" + esc(a.full_name) + \",</p><p>An offer needs your <b>level \" + o.next_level + \"</b> approval\" + (o.required_approval_levels === 2 ? \" (two levels are required because the salary is above \" + esc(money(o.approval_threshold_applied, o.currency)) + \")\" : \"\") + \".</p><table cellpadding='4'><tr><td style='color:#667085'>Candidate</td><td><b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.application_code) + \")</td></tr><tr><td style='color:#667085'>Position</td><td>\" + esc(s.app.position.title) + \", \" + esc(o.department) + \"</td></tr><tr><td style='color:#667085'>Monthly salary</td><td><b>\" + esc(money(o.monthly_salary, o.currency)) + \"</b> (expected \" + esc(s.app.expected_salary ? money(s.app.expected_salary, o.currency) : \"-\") + \")</td></tr><tr><td style='color:#667085'>Joining date</td><td>\" + esc(fmtDate(o.joining_date)) + \"</td></tr><tr><td style='color:#667085'>Scores</td><td>screening \" + esc(s.app.application_score ?? \"-\") + \", interview \" + esc(s.app.interview_score ?? \"-\") + \", final \" + esc(s.app.final_score ?? \"-\") + \"</td></tr></table><p><a href='\" + esc($json.body.url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Review and decide</a></p><p style='color:#667085'>A rejection needs a reason and sends the offer back to HR for revision.</p>\", \"Offer \" + esc(o.offer_code) + \" revision \" + o.revision); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "6838998b-acba-5aec-afdc-4bce74fb18fe",
+      "name": "Approved or Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7c2b7430-03c2-5a3b-ade6-1fccd7031aa5",
+              "leftValue": "={{ Boolean([\"APPROVED\", \"SENT\"].includes($(\"Start Log & Load State\").first().json.offer?.status)) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a16de699-c3e5-525a-a92c-46ad15bd9099",
+      "name": "Offer Letter (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        920
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/offers/document",
+            "body": "={{ ({ offer_id: $(\"Start Log & Load State\").first().json.offer.offer_id }) }}",
+            "fault_inject": "={{ $(\"Start Log & Load State\").first().json.fault_inject || \"\" }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "a55ac248-4226-5022-a0b3-5f3519fd2fc6",
+      "name": "Offer Letter OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1800,
+        920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9b3975ce-365c-52f9-a136-936ed6eaff41",
+      "name": "Mark Offer Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2060,
+        920
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.mark_offer_sent($1::uuid, $2, $3::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Start Log & Load State\").first().json.offer.offer_id, $json.body.document_key, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "c2962930-a44a-55dc-ae82-23b5bb170c1e",
+      "name": "Offer Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"OFFER_RESPONSE\", subject_id: $(\"Start Log & Load State\").first().json.app.candidate.candidate_id, entity_id: $(\"Start Log & Load State\").first().json.offer.offer_id, expires_at: $json.expires_at }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "7e4cc590-70f8-5a11-a4f2-8681854afd32",
+      "name": "Offer Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2580,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "963a460f-f3c7-5eb9-adb9-0239380a1aed",
+      "name": "Send Offer (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2840,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.sent:\" + $(\"Start Log & Load State\").first().json.offer.offer_id }}",
+            "channel": "EMAIL",
+            "template_key": "offer.sent",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"Your offer from \" + $(\"Start Log & Load State\").first().json.app.company.name + \": \" + $(\"Start Log & Load State\").first().json.app.position.title }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const money = (v, c) => (c || \"PKR\") + \" \" + Number(v).toLocaleString(\"en-US\"); const s = $(\"Start Log & Load State\").first().json; const o = s.offer; const sent = $(\"Mark Offer Sent\").first().json; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Congratulations! We are delighted to offer you the position of <b>\" + esc(s.app.position.title) + \"</b>.</p><table cellpadding='4'><tr><td style='color:#667085'>Monthly gross salary</td><td><b>\" + esc(money(o.monthly_salary, o.currency)) + \"</b></td></tr><tr><td style='color:#667085'>Joining date</td><td>\" + esc(fmtDate(o.joining_date)) + \"</td></tr><tr><td style='color:#667085'>Probation</td><td>\" + o.probation_months + \" month(s)</td></tr><tr><td style='color:#667085'>Reporting to</td><td>\" + esc(o.reporting_manager?.full_name || \"-\") + \"</td></tr></table><p><a href='\" + esc($json.body.url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>View your offer letter and respond</a></p><p>You can accept, decline or ask to discuss the terms. This offer is valid until <b>\" + esc(fmt(sent.expires_at, s.timezone)) + \"</b>. The link is personal; please do not forward it.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Human Resources</p>\", \"Offer \" + esc(o.offer_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "3b948331-8c98-5971-a63c-20052a1f74ca",
+      "name": "Offer Still Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b13de08e-a023-548c-a9ea-404207de5a49",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.offer?.status === \"SENT\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "55acd9ee-2697-5a0d-af2f-b6de7adfe29f",
+      "name": "Reminder Offer Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1120
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"OFFER_RESPONSE\", subject_id: $(\"Start Log & Load State\").first().json.app.candidate.candidate_id, entity_id: $(\"Start Log & Load State\").first().json.offer.offer_id, expires_at: $(\"Start Log & Load State\").first().json.offer.expires_at }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "6699a092-3c77-5da8-a622-cb5fdad12420",
+      "name": "Reminder Offer Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1800,
+        1120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8312dffb-72ee-5e26-a43a-9089c2b961ef",
+      "name": "Send Offer Reminder (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2060,
+        1120
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.\" + ($(\"Build Context\").first().json.action.action_type === \"OFFER_FINAL_REMINDER\" ? \"final_reminder\" : \"reminder\") + \":\" + $(\"Start Log & Load State\").first().json.offer.offer_id }}",
+            "channel": "EMAIL",
+            "template_key": "offer.reminder",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ ($(\"Build Context\").first().json.action.action_type === \"OFFER_FINAL_REMINDER\" ? \"Final reminder: \" : \"Reminder: \") + \"your offer for \" + $(\"Start Log & Load State\").first().json.app.position.title + \" is waiting\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const o = s.offer; const final = $(\"Build Context\").first().json.action.action_type === \"OFFER_FINAL_REMINDER\"; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>\" + (final ? \"This is a final reminder: your\" : \"Your\") + \" offer for <b>\" + esc(s.app.position.title) + \"</b> is still waiting for your answer. It expires on <b>\" + esc(fmt(o.expires_at, s.timezone)) + \"</b>.</p><p><a href='\" + esc($json.body.url) + \"'>View the offer and respond</a></p><p>If you have questions about the terms, choose \\\"discuss terms\\\" and we will get back to you.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Human Resources</p>\", \"Offer \" + esc(o.offer_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "98d8a403-073e-548f-a9af-2128f40c4b26",
+      "name": "Expire Offer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1280,
+        1120
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.expire_offer($1::uuid, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").first().json.entity_id, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d13fa87f-db6b-5c01-a42a-a7d44e7b47e5",
+      "name": "Result: Expiry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1540,
+        1320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9411c32-3a93-57af-a281-012b4349e455",
+              "name": "action_outcome",
+              "value": "={{ $json.changed ? \"DONE\" : \"SKIPPED\" }}",
+              "type": "string"
+            },
+            {
+              "id": "793b19fe-b11a-5bed-abbc-b65fbeda7362",
+              "name": "action_reason",
+              "value": "={{ $json.changed ? \"offer expired without a response\" : \"offer is \" + $json.status + \"; nothing to expire\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fe7ed510-d49a-57a4-a573-e4895863bd72",
+      "name": "Negotiating?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5322ba14-c793-593e-a8e4-d5b21adece09",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.app?.status === \"NEGOTIATION\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5032bf96-e14b-5a96-a48c-be4834b80da8",
+      "name": "Notify HR of Negotiation (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.negotiation_hr:\" + $(\"Start Log & Load State\").first().json.offer.offer_id }}",
+            "channel": "EMAIL",
+            "template_key": "offer.negotiation_hr",
+            "recipient": "={{ [$(\"Start Log & Load State\").first().json.hr_emails, $(\"Start Log & Load State\").first().json.offer.reporting_manager?.email].filter(Boolean).join(\",\") }}",
+            "subject": "={{ \"[Action needed] \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \" wants to discuss offer \" + $(\"Start Log & Load State\").first().json.offer.offer_code }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const money = (v, c) => (c || \"PKR\") + \" \" + Number(v).toLocaleString(\"en-US\"); const s = $(\"Start Log & Load State\").first().json; const o = s.offer; return layout(\"<p><b>\" + esc(s.app.candidate.full_name) + \"</b> asked to discuss the offer for \" + esc(s.app.position.title) + \" (\" + esc(money(o.monthly_salary, o.currency)) + \"/month).</p><blockquote style='border-left:3px solid #d0d5dd;margin:0;padding-left:12px;color:#344054'>\" + esc(o.candidate_message || \"(no message)\") + \"</blockquote><p>Next step: either draft a revised offer (it goes through approval again) or close the negotiation with a reason.</p>\", \"Offer \" + esc(o.offer_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "824eecbe-f538-56ff-a004-b9c93d7e0089",
+      "name": "Acknowledge Negotiation (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        1320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.negotiation_ack:\" + $(\"Start Log & Load State\").first().json.offer.offer_id }}",
+            "channel": "EMAIL",
+            "template_key": "offer.negotiation_ack",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"We received your message about your offer\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Thank you for your message about the offer for <b>\" + esc(s.app.position.title) + \"</b>. Our HR team will review it and get back to you shortly.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Human Resources</p>\", \"Offer \" + esc(s.offer.offer_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "OFFER",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.offer.offer_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "4565636c-2e74-5e0f-a080-6b4950d1017a",
+      "name": "Offer Closed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c1eec99a-eda0-5e24-ae5f-5b825798e61d",
+              "leftValue": "={{ Boolean([\"DECLINED\", \"OFFER_EXPIRED\"].includes($(\"Start Log & Load State\").first().json.app?.status)) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "91dde2b0-920d-536e-af47-2f89af7e78ac",
+      "name": "Notify HR of Closure (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.closed_hr:\" + $(\"Start Log & Load State\").first().json.app.application_id + \":\" + $(\"Start Log & Load State\").first().json.app.status }}",
+            "channel": "EMAIL",
+            "template_key": "offer.closed_hr",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.hr_emails }}",
+            "subject": "={{ \"Offer \" + ($(\"Start Log & Load State\").first().json.app.status === \"DECLINED\" ? \"declined\" : \"expired\") + \": \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \" (\" + $(\"Start Log & Load State\").first().json.app.position.title + \")\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const o = s.offer || {}; return layout(\"<p>The offer \" + esc(o.offer_code || \"\") + \" for <b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.position.title) + \") \" + (s.app.status === \"DECLINED\" ? \"was declined\" : \"expired without a response\") + \".</p>\" + (o.candidate_message ? \"<p>Candidate message: <i>\" + esc(o.candidate_message) + \"</i></p>\" : \"\") + \"<p>The application is closed. Consider the next candidate in the pipeline for this position.</p>\", \"Application \" + esc(s.app.application_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "32b60ecb-6601-5d67-aee5-ca0a1ab89ef1",
+      "name": "Close With Candidate (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        1520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"offer.closed:\" + $(\"Start Log & Load State\").first().json.app.application_id + \":\" + $(\"Start Log & Load State\").first().json.app.status }}",
+            "channel": "EMAIL",
+            "template_key": "offer.closed",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ $(\"Start Log & Load State\").first().json.app.status === \"DECLINED\" ? \"Thank you for letting us know\" : \"Your offer has expired\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const body = s.app.status === \"DECLINED\" ? \"<p>Thank you for letting us know your decision about the <b>\" + esc(s.app.position.title) + \"</b> offer. We respect it and wish you every success. We would be glad to hear from you again in the future.</p>\" : \"<p>The offer for <b>\" + esc(s.app.position.title) + \"</b> has expired because we did not receive a response in time. If you are still interested, please reply to this email and our team will get in touch.</p>\"; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p>\" + body + \"<p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Human Resources</p>\", \"Application \" + esc(s.app.application_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "2314a5bd-84dd-5c30-ab38-53731e794036",
+      "name": "Result: Unknown Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1280,
+        1720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e61e6e1-95ef-546d-acf9-7f4d832c902a",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "7868cdda-0583-58a0-a7d5-ee7866845d26",
+              "name": "action_reason",
+              "value": "={{ \"WF-05 has no handler for \" + $(\"Build Context\").first().json.action.action_type }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "15537bc1-f6af-5aea-a166-f89d62275688",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "parameters": {
+        "content": "## WF-05 Offer Management\nCalled by **WF-00** for offer actions; every branch re-checks the offer/application state first.\n- **Draft** (`api.create_offer`): salary from the expected salary clamped to the band; above `offer.second_approval_threshold` two approval levels are required. After an approver rejection the system never re-drafts; HR is asked to revise.\n- **Approval**: a signed link to the reporting manager (if eligible) or the first eligible approver. Level 1 before level 2, never the same person, never the creator (enforced by the database).\n- **Send**: backend renders the PDF → `api.mark_offer_sent` (schedules reminders + expiry) → signed response link → email.\n- **Reminders / expiry / negotiation / closure** notify the candidate and HR. A response cancels the timers.",
+        "width": 620,
+        "height": 340,
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Start Log & Load State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Log & Load State": {
+      "main": [
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip: No Longer Applies": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Notification": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retryable Failure?": {
+      "main": [
+        [
+          {
+            "node": "Result: Retry Later",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Retry Later": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failure (SWF-03)": {
+      "main": [
+        [
+          {
+            "node": "Result: Moved to Error Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [
+          {
+            "node": "Selected?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Awaiting Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Approved or Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Offer Still Open?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Offer Still Open?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Expire Offer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Negotiating?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Offer Closed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Unknown Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Selected?": {
+      "main": [
+        [
+          {
+            "node": "Draft Offer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Offer": {
+      "main": [
+        [
+          {
+            "node": "Revision Required?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revision Required?": {
+      "main": [
+        [
+          {
+            "node": "Ask HR to Revise (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Offer Drafted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask HR to Revise (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Offer Drafted": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Awaiting Approval?": {
+      "main": [
+        [
+          {
+            "node": "Approver Available?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approver Available?": {
+      "main": [
+        [
+          {
+            "node": "Approval Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Approver Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Approver Configured": {
+      "main": [
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Approval Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Request Approval (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Approval (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved or Sent?": {
+      "main": [
+        [
+          {
+            "node": "Offer Letter (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Letter (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Offer Letter OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Letter OK?": {
+      "main": [
+        [
+          {
+            "node": "Mark Offer Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Offer Sent": {
+      "main": [
+        [
+          {
+            "node": "Offer Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Offer Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Send Offer (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Offer (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Still Open?": {
+      "main": [
+        [
+          {
+            "node": "Reminder Offer Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder Offer Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Reminder Offer Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder Offer Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Send Offer Reminder (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Offer Reminder (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expire Offer": {
+      "main": [
+        [
+          {
+            "node": "Result: Expiry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Expiry": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Negotiating?": {
+      "main": [
+        [
+          {
+            "node": "Notify HR of Negotiation (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify HR of Negotiation (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Negotiation (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge Negotiation (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer Closed?": {
+      "main": [
+        [
+          {
+            "node": "Notify HR of Closure (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify HR of Closure (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Close With Candidate (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close With Candidate (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Unknown Action": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "ce6ef4d5-4212-4d56-a1b5-a85d3ad0ab93",
+  "activeVersionId": "ce6ef4d5-4212-4d56-a1b5-a85d3ad0ab93",
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T21:02:46.801Z",
+      "createdAt": "2026-10-01T21:02:46.801Z",
+      "role": "workflow:owner",
+      "workflowId": "ntWf05OfferMgmt1",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

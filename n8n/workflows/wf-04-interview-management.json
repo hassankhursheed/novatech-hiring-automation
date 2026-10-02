@@ -1,0 +1,3038 @@
+{
+  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "createdAt": "2026-10-01T21:02:46.801Z",
+  "id": "ntWf04Interview1",
+  "name": "WF-04 Interview Management",
+  "description": "WF-04: interview invitations (signed slot links), reminders, expiry, calendar + confirmation, interviewer scorecard links, feedback reminders/escalation and post-interview evaluation (30/70 weighted, configurable).",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "13a43406-ba0a-5d87-a501-566ceed5e873",
+      "name": "When Called by Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "action",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1a330627-e6dc-534d-aecc-8d9bc8ac9ba8",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b3a2db4d-8b8a-5f29-af8e-fe15008d62b3",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-04\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.action.correlation_id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "d04a2b32-4bf3-5dff-a65a-35bc16f9ddbc",
+              "name": "action",
+              "value": "={{ $json.action }}",
+              "type": "object"
+            },
+            {
+              "id": "eb62a50c-63cd-5199-a2d3-4061b015a35d",
+              "name": "application_id",
+              "value": "={{ $json.action.application_id || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e0a2f874-580a-5677-a5c8-5e06f9e29efb",
+              "name": "entity_type",
+              "value": "={{ $json.action.entity_type || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7bea0c12-e153-5b79-a619-447b242598e0",
+              "name": "entity_id",
+              "value": "={{ $json.action.entity_id || \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1667fe35-5162-5b93-aed5-ac3206c175bb",
+      "name": "Start Log & Load State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', $2, $3) AS run_id,\n       api.application_snapshot(coalesce(NULLIF($4, '')::uuid, iv.application_id)) AS app,\n       iv.snapshot AS interview,\n       (SELECT sa.run_at FROM ops.scheduled_actions sa\n         WHERE sa.entity_id = iv.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY' AND sa.status IN ('PENDING', 'RUNNING')\n         ORDER BY sa.run_at LIMIT 1) AS invite_expires_at,\n       api.test_directive($5) AS fault_inject,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone') AS timezone,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND 'HR_ADMIN' = ANY (s.roles)) AS hr_emails\n  FROM (SELECT 1) AS one\n  LEFT JOIN LATERAL (\n    SELECT i.id, i.application_id, api.interview_snapshot(i.id) AS snapshot\n      FROM hiring.interviews i\n     WHERE CASE WHEN $2 = 'INTERVIEW' THEN i.id = NULLIF($3, '')::uuid ELSE i.application_id = NULLIF($4, '')::uuid END\n     ORDER BY i.round DESC LIMIT 1) AS iv ON true",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.entity_type, $json.entity_id, $json.application_id, $json.ctx.correlation_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "363cfb1d-1b99-524a-a1a8-5991e45d78f0",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "INVITE_TO_INTERVIEW",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "41840016-9486-591b-a0d7-9f23fe2c1d42",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "INVITE_TO_INTERVIEW"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "INTERVIEW_INVITE_REMINDER",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "058948c5-ff88-535d-a31e-f4a4508b748f",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "INTERVIEW_INVITE_REMINDER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "INTERVIEW_INVITE_EXPIRY",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "364a34b2-5172-5215-a534-e012dd28193c",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "INTERVIEW_INVITE_EXPIRY"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "FINALIZE_INTERVIEW_BOOKING",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cd65aec0-bf8d-577f-a03c-19cb6d827d66",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "FINALIZE_INTERVIEW_BOOKING"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "FEEDBACK_REMINDER",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e244b36a-0acc-5dd8-a539-4c1207ef6057",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "FEEDBACK_REMINDER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "FEEDBACK_ESCALATION",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f8a0a6be-9fa3-5cd6-accb-aa0ee3a01ceb",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "FEEDBACK_ESCALATION"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "EVALUATE_INTERVIEW",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a742fb16-2530-5ca7-a13c-fc7a15a1204d",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "EVALUATE_INTERVIEW"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unhandled"
+        }
+      }
+    },
+    {
+      "id": "ce68d976-f941-507d-a34e-667edf96f0f2",
+      "name": "Finish & Return",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3100,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms, $3 AS action_outcome, $4 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").first().json.ctx), ({ DONE: \"SUCCEEDED\", SKIPPED: \"SKIPPED\" })[$json.action_outcome] || \"FAILED\", $json.action_outcome, $json.action_reason ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "88f327b7-b2a9-52c1-a6ae-c4beba751536",
+      "name": "Skip: No Longer Applies",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fe555ff1-ebf8-5edb-a54a-a48f1105f5d0",
+              "name": "action_outcome",
+              "value": "SKIPPED",
+              "type": "string"
+            },
+            {
+              "id": "abd53273-4dc1-5a51-ad56-68cf07cb810a",
+              "name": "action_reason",
+              "value": "={{ (() => { const s = $(\"Start Log & Load State\").first().json; const parts = []; if (s.app) parts.push(\"application \" + s.app.status); for (const k of [\"interview\", \"offer\", \"employee\"]) if (s[k]) parts.push(k + \" \" + s[k].status); return $(\"Build Context\").first().json.action.action_type + \" no longer applies (\" + (parts.join(\", \") || \"entity missing\") + \")\"; })() }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ca46bf44-82d7-528c-a365-d78d7d4d4520",
+      "name": "Result: Notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2840,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b359a5a9-7e0b-5f71-ada4-e7880b097c99",
+              "name": "action_outcome",
+              "value": "={{ [\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c31a272b-181f-5170-aec1-1f9928611a06",
+              "name": "action_reason",
+              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a18a560e-2ac4-59cb-a6ea-0db76077821a",
+      "name": "Retryable Failure?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2320,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cf54e308-99c1-53a3-aecd-1f61278fea30",
+              "leftValue": "={{ Boolean($json.error_class === \"RETRYABLE\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9edff666-e2aa-5df9-a61c-7eae110b4026",
+      "name": "Result: Retry Later",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2580,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "38c67552-2230-53ea-ae50-167f1398bb32",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "16ae6db3-c36a-55d9-a039-98ac2dd5cba9",
+              "name": "action_reason",
+              "value": "={{ ($json.error_code || \"RETRYABLE\") + \": \" + ($json.error_message || \"temporary failure\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "871c7630-4893-5cb8-aa58-e95ad1cddf19",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2580,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.error?.message ?? $json.error) : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-04\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-04\", payload: { action: a } }; })() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "d44d7b07-bcfb-54ee-a773-287dd8abc613",
+      "name": "Result: Moved to Error Queue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2840,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "94f4101d-aade-583e-a311-a83c633784ef",
+              "name": "action_outcome",
+              "value": "DONE",
+              "type": "string"
+            },
+            {
+              "id": "1c6fc7e1-cba5-5a54-afe5-7f0f8695d74b",
+              "name": "action_reason",
+              "value": "={{ \"permanent failure moved to the error queue (\" + $json.error_id + \")\" }}",
+              "type": "string"
+            },
+            {
+              "id": "1e66ee86-8183-53b1-a029-45b7c71702b8",
+              "name": "error_id",
+              "value": "={{ $json.error_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e9e3e6f3-eae3-50c7-a1fe-6dcd4b8a65ce",
+      "name": "Shortlisted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "efaf5aaf-eb72-5ba1-abe2-dc7b43f33790",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.app?.status === \"SHORTLISTED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "cfc8a8e6-bc28-5824-a94d-41d897ff6ca2",
+      "name": "Create Invitation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.create_interview_invitation($1::uuid, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Start Log & Load State\").first().json.app.application_id, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "f110b94b-b6ea-5efd-a7fe-ae37c3ccf4a6",
+      "name": "Invitation Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"INTERVIEW_SLOT\", subject_id: $(\"Start Log & Load State\").first().json.app.candidate.candidate_id, entity_id: $json.interview_id, expires_at: $json.invite_expires_at }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $json.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "c94f6e5c-0b74-5b6c-a45d-cc5a14a852fb",
+      "name": "Invitation Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2060,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "156c9b4c-1b1f-576e-a1a0-b3c3519f25d0",
+      "name": "Send Invitation (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.invite:\" + $(\"Create Invitation\").first().json.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.invitation",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"Interview invitation: \" + $(\"Start Log & Load State\").first().json.app.position.title + \" at \" + $(\"Start Log & Load State\").first().json.app.company.name }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const inv = $(\"Create Invitation\").first().json; const url = $json.body.url; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Thank you for your application for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \"). We would like to invite you to an interview with \" + esc(inv.interviewer_name) + \".</p><p><a href='\" + esc(url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Choose your interview slot</a></p><p>Please pick a time before <b>\" + esc(fmt(inv.invite_expires_at, s.timezone)) + \"</b>. This link is personal; please do not forward it.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(inv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Create Invitation\").first().json.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "217fa1f3-8d75-56b2-a84f-9a8136ede3da",
+      "name": "Still Invited?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2c3d6c4f-c335-5ca3-a4a2-543749a4c491",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.interview?.status === \"INVITED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5a8a5edc-2a1d-5f2b-a742-3333f6d86b72",
+      "name": "Reminder Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"INTERVIEW_SLOT\", subject_id: $(\"Start Log & Load State\").first().json.app.candidate.candidate_id, entity_id: $(\"Start Log & Load State\").first().json.interview.interview_id, expires_at: $(\"Start Log & Load State\").first().json.invite_expires_at }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "f7af1201-0679-59c4-ad5c-266478669491",
+      "name": "Reminder Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1800,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7748d6ed-17cf-55e1-a817-d3150cd98790",
+      "name": "Send Invitation Reminder (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2060,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.invite_reminder:\" + $(\"Start Log & Load State\").first().json.interview.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.invitation_reminder",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"Reminder: please choose your interview slot for \" + $(\"Start Log & Load State\").first().json.app.position.title }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>We have not yet received your interview slot choice for <b>\" + esc(s.app.position.title) + \"</b>.</p><p><a href='\" + esc($json.body.url) + \"'>Choose your interview slot</a></p><p>The invitation expires on <b>\" + esc(fmt(s.invite_expires_at, s.timezone)) + \"</b>. If you are no longer interested, you can ignore this email.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(s.interview.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "a38fad22-178f-5b46-a501-4a4818c73471",
+      "name": "Expire Invitation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1280,
+        720
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.expire_interview_invitation($1::uuid, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Build Context\").first().json.entity_id, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "cb3fe02b-91f1-5c89-a6fa-5107d81abf53",
+      "name": "Result: Expiry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1540,
+        920
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9411c32-3a93-57af-a281-012b4349e455",
+              "name": "action_outcome",
+              "value": "={{ $json.changed ? \"DONE\" : \"SKIPPED\" }}",
+              "type": "string"
+            },
+            {
+              "id": "793b19fe-b11a-5bed-abbc-b65fbeda7362",
+              "name": "action_reason",
+              "value": "={{ $json.changed ? \"invitation expired; application returned to screening review\" : \"invitation was already \" + $json.status }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5ffe9d0b-b012-5cf4-ae36-795a4c856244",
+      "name": "Interview Confirmed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f5736852-e190-56fe-ab10-932e2ebbc9cb",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.interview?.status === \"CONFIRMED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0aea4f86-c3d7-51a2-a952-0057a8d38033",
+      "name": "Record Calendar Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        1120
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.record_calendar_event($1::uuid, $2, $3::jsonb) AS calendar_event_id",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Start Log & Load State\").first().json.interview.interview_id, $(\"Start Log & Load State\").first().json.interview.calendar_event_id || (\"novatech-\" + $(\"Start Log & Load State\").first().json.interview.interview_code), JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "1fee03af-4b6b-5e58-a09b-9a8d5299434f",
+      "name": "Scorecard Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"INTERVIEW_FEEDBACK\", subject_id: $(\"Start Log & Load State\").first().json.interview.interviewer.id, entity_id: $(\"Start Log & Load State\").first().json.interview.interview_id, expires_at: DateTime.fromISO($(\"Start Log & Load State\").first().json.interview.scheduled_end).plus({ days: 14 }).toISO() }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "e35b411a-85ca-5d08-a092-fea11d3620f0",
+      "name": "Scorecard Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2060,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "40c7f37e-e89f-5065-ae42-dc11c223cda8",
+      "name": "Confirm to Candidate (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.confirmed:\" + $(\"Start Log & Load State\").first().json.interview.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.confirmed",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"Interview confirmed: \" + $(\"Start Log & Load State\").first().json.app.position.title + \", \" + DateTime.fromISO($(\"Start Log & Load State\").first().json.interview.scheduled_start).setZone($(\"Start Log & Load State\").first().json.timezone).toFormat(\"d LLL, h:mm a\") }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + DateTime.fromISO(start).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + DateTime.fromISO(end).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const where = iv.mode === \"ONLINE\" ? (iv.meeting_url ? \"Online: <a href='\" + esc(iv.meeting_url) + \"'>\" + esc(iv.meeting_url) + \"</a>\" : \"Online (the meeting link will follow)\") : \"On site at \" + esc(s.app.company.name); return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Your interview for <b>\" + esc(s.app.position.title) + \"</b> is confirmed.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b> (\" + esc(s.timezone) + \")</td></tr><tr><td style='color:#667085'>Where</td><td>\" + where + \"</td></tr><tr><td style='color:#667085'>Interviewer</td><td>\" + esc(iv.interviewer.full_name) + \"</td></tr></table><p><a href='\" + esc(gcal(\"Interview: \" + s.app.position.title + \" (\" + s.app.company.name + \")\", iv.scheduled_start, iv.scheduled_end, \"Reference \" + iv.interview_code)) + \"'>Add to Google Calendar</a></p><p>If you need to cancel, please use the link in your invitation email so the slot can be offered to someone else.</p><p>Good luck!<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "32e7e809-731e-5a77-afe0-8315b4cdf914",
+      "name": "Brief Interviewer (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2580,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.interviewer_brief:\" + $(\"Start Log & Load State\").first().json.interview.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.interviewer_brief",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.interview.interviewer.email }}",
+            "subject": "={{ \"Interview booked: \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \" (\" + $(\"Start Log & Load State\").first().json.app.position.title + \")\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + DateTime.fromISO(start).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + DateTime.fromISO(end).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const url = $(\"Scorecard Link (SWF-01)\").first().json.body.url; return layout(\"<p>Hi \" + esc(iv.interviewer.full_name) + \",</p><p>An interview has been booked with you.</p><table cellpadding='4'><tr><td style='color:#667085'>Candidate</td><td><b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.application_code) + \")</td></tr><tr><td style='color:#667085'>Position</td><td>\" + esc(s.app.position.title) + \"</td></tr><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b></td></tr><tr><td style='color:#667085'>Screening score</td><td>\" + esc(s.app.application_score ?? \"-\") + \"</td></tr></table><p><a href='\" + esc(gcal(\"Interview: \" + s.app.candidate.full_name, iv.scheduled_start, iv.scheduled_end, \"Scorecard: \" + url)) + \"'>Add to Google Calendar</a></p><p>After the interview, please submit the scorecard (5 criteria, 1 to 5, plus your recommendation):<br/><a href='\" + esc(url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px'>Open scorecard</a></p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "f70feb3c-3b9b-5f48-a438-a046918747e9",
+      "name": "Feedback Still Missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6589f6fe-e1f9-51eb-a8b5-66ab54b74b43",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.interview?.status === \"CONFIRMED\" && !$(\"Start Log & Load State\").first().json.interview?.has_feedback) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "897b8296-9df1-597d-a7e7-c102d9e8d46e",
+      "name": "Reminder Scorecard Link (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/links",
+            "body": "={{ ({ purpose: \"INTERVIEW_FEEDBACK\", subject_id: $(\"Start Log & Load State\").first().json.interview.interviewer.id, entity_id: $(\"Start Log & Load State\").first().json.interview.interview_id, expires_at: DateTime.now().plus({ days: 14 }).toISO() }) }}",
+            "fault_inject": "={{ \"\" }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "1fe5d7b7-9fd2-57d3-a2ac-68b7e2c05a8d",
+      "name": "Reminder Scorecard Link OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1800,
+        920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "70015eb4-1255-5198-a0d0-6e77d89929f2",
+      "name": "Remind Interviewer (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2060,
+        920
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.feedback_reminder:\" + $(\"Start Log & Load State\").first().json.interview.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.feedback_reminder",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.interview.interviewer.email }}",
+            "subject": "={{ \"Reminder: scorecard for \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \" is due\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; return layout(\"<p>Hi \" + esc(iv.interviewer.full_name) + \",</p><p>We have not received your scorecard for <b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.position.title) + \"), interviewed on \" + esc(fmt(iv.scheduled_start, s.timezone)) + \". The candidate cannot move forward until it is submitted.</p><p><a href='\" + esc($json.body.url) + \"'>Submit the scorecard</a></p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "b8f77f6d-8cfe-5b95-a42b-d7aa50f0ea23",
+      "name": "Feedback Still Missing at Escalation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6589f6fe-e1f9-51eb-a8b5-66ab54b74b43",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.interview?.status === \"CONFIRMED\" && !$(\"Start Log & Load State\").first().json.interview?.has_feedback) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "22bb8750-ff15-5ce4-a20c-457c0bc26baa",
+      "name": "Escalate to HR (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.feedback_escalation:\" + $(\"Start Log & Load State\").first().json.interview.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.feedback_escalation",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.hr_emails }}",
+            "subject": "={{ \"[Escalation] Interview feedback overdue: \" + $(\"Start Log & Load State\").first().json.interview.interview_code }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; return layout(\"<p>Interview feedback is overdue and a reminder did not help.</p><table cellpadding='4'><tr><td style='color:#667085'>Interview</td><td><b>\" + esc(iv.interview_code) + \"</b> on \" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</td></tr><tr><td style='color:#667085'>Interviewer</td><td>\" + esc(iv.interviewer.full_name) + \" (\" + esc(iv.interviewer.email) + \")</td></tr><tr><td style='color:#667085'>Candidate</td><td>\" + esc(s.app.candidate.full_name) + \" (\" + esc(s.app.application_code) + \")</td></tr></table><p>Please follow up with the interviewer, or submit the feedback on their behalf as HR admin.</p>\", \"Correlation id \" + esc(s.app.correlation_id)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "5a35e173-1996-5c95-a1f1-dcae4dac2321",
+      "name": "Interviewed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d364dfa9-ae61-54fc-a7af-399471b36f8e",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.app?.status === \"INTERVIEWED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "46266972-4a4c-560a-aeb2-6bc8bdd6e4d7",
+      "name": "Evaluate Interview (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/interviews/evaluate",
+            "body": "={{ ({ application_id: $(\"Start Log & Load State\").first().json.app.application_id }) }}",
+            "fault_inject": "={{ $(\"Start Log & Load State\").first().json.fault_inject || \"\" }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "82b6b1be-11fc-5f1f-aa80-d3fdb7ab78f6",
+      "name": "Evaluate Interview OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1800,
+        1120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "888f5e59-d82d-5683-a878-e195e6d0c4b7",
+              "leftValue": "={{ Boolean($json.ok) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9ffbf323-e769-520c-ad14-60063d0c3631",
+      "name": "Apply Interview Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2060,
+        1120
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.apply_interview_decision($1::uuid, $2::jsonb, $3::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Start Log & Load State\").first().json.app.application_id, JSON.stringify({ decision: $json.body.decision, reason: $json.body.reason, final_score: $json.body.final_score, policy_version: $json.body.policy_version }), JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d5a78c31-787e-523d-a72d-adcfdbb81c60",
+      "name": "Result: Decision Applied",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2320,
+        920
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "892e9159-8bad-5dae-ad1f-e76bb7316142",
+              "name": "action_outcome",
+              "value": "DONE",
+              "type": "string"
+            },
+            {
+              "id": "b5356b23-5bb6-5ca0-ac9d-47c1a86d39e8",
+              "name": "action_reason",
+              "value": "={{ \"interview decision: \" + $json.to_status + ($json.changed ? \"\" : \" (already applied)\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e58df9d1-768d-56fe-a2f8-b2bbf4af0666",
+      "name": "Result: Unknown Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1280,
+        1720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e61e6e1-95ef-546d-acf9-7f4d832c902a",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "7868cdda-0583-58a0-a7d5-ee7866845d26",
+              "name": "action_reason",
+              "value": "={{ \"WF-04 has no handler for \" + $(\"Build Context\").first().json.action.action_type }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cb9a9513-782e-50f0-a9f4-0630b798f00f",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "parameters": {
+        "content": "## WF-04 Interview Management\nCalled by **WF-00** for interview actions. Every branch first re-checks the current state (a stale timer is **SKIPPED**).\n- **Invite**: `api.create_interview_invitation` (idempotent per round, schedules reminder + expiry) → signed slot link → email.\n- **Booking**: the candidate confirms in the portal (`api.confirm_interview_slot`), then this workflow records the calendar event, confirms to the candidate and sends the interviewer a scorecard link.\n- **Feedback**: reminder, then escalation to HR. Submitting the scorecard cancels both timers.\n- **Evaluation**: backend combined score (weights and thresholds are settings) → `api.apply_interview_decision`.\nRetryable failures return FAILED (dispatcher backoff); permanent ones go to the error queue (SWF-03). Emails are sent at most once per dedupe key.",
+        "width": 620,
+        "height": 340,
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Start Log & Load State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Log & Load State": {
+      "main": [
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip: No Longer Applies": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Notification": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retryable Failure?": {
+      "main": [
+        [
+          {
+            "node": "Result: Retry Later",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Retry Later": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failure (SWF-03)": {
+      "main": [
+        [
+          {
+            "node": "Result: Moved to Error Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [
+          {
+            "node": "Shortlisted?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Still Invited?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Expire Invitation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Interview Confirmed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Feedback Still Missing?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Feedback Still Missing at Escalation?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Interviewed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Unknown Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shortlisted?": {
+      "main": [
+        [
+          {
+            "node": "Create Invitation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Invitation": {
+      "main": [
+        [
+          {
+            "node": "Invitation Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invitation Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Invitation Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invitation Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Send Invitation (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Invitation (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still Invited?": {
+      "main": [
+        [
+          {
+            "node": "Reminder Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Reminder Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Send Invitation Reminder (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Invitation Reminder (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expire Invitation": {
+      "main": [
+        [
+          {
+            "node": "Result: Expiry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Expiry": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interview Confirmed?": {
+      "main": [
+        [
+          {
+            "node": "Record Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Scorecard Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scorecard Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Scorecard Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scorecard Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Confirm to Candidate (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm to Candidate (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Brief Interviewer (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brief Interviewer (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Feedback Still Missing?": {
+      "main": [
+        [
+          {
+            "node": "Reminder Scorecard Link (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder Scorecard Link (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Reminder Scorecard Link OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminder Scorecard Link OK?": {
+      "main": [
+        [
+          {
+            "node": "Remind Interviewer (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remind Interviewer (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Feedback Still Missing at Escalation?": {
+      "main": [
+        [
+          {
+            "node": "Escalate to HR (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate to HR (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interviewed?": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Interview (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Interview (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Interview OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Interview OK?": {
+      "main": [
+        [
+          {
+            "node": "Apply Interview Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retryable Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Interview Decision": {
+      "main": [
+        [
+          {
+            "node": "Result: Decision Applied",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Decision Applied": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Unknown Action": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "5734f611-a832-498a-996f-18604c4296a1",
+  "activeVersionId": "5734f611-a832-498a-996f-18604c4296a1",
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T21:02:46.801Z",
+      "createdAt": "2026-10-01T21:02:46.801Z",
+      "role": "workflow:owner",
+      "workflowId": "ntWf04Interview1",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

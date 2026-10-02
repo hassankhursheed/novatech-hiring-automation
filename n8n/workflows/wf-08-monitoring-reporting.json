@@ -1,0 +1,1319 @@
+{
+  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "createdAt": "2026-10-01T21:02:46.801Z",
+  "id": "ntWf08Monitoring",
+  "name": "WF-08 Monitoring & Reporting",
+  "description": "WF-08: daily management report at 09:00 (all figures from reporting.daily_metrics, AI prose behind a numeric guardrail, one report per date, emailed once) and review-queue alerts for recruiters / hiring managers.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "04274985-cfce-54a1-adc4-65b90d4ff0d0",
+      "name": "Daily 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b336979f-6e5e-54b5-aa36-f59b91f470b5",
+      "name": "Run Report On Demand",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        520
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops/daily-report",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {},
+        "responseData": "firstEntryJson"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "webhookId": "eee3f276-c976-5457-ab9b-87d6af0cf747"
+    },
+    {
+      "id": "084c3ed7-de71-5dfb-a0e4-e05bcadd48be",
+      "name": "When Called by Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        720
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "action",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9c016bf3-2bd6-584e-a678-1ca252029d68",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "NOTIFY_REVIEW_QUEUE",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "23fc8b5c-ff00-5cd6-a3d8-3152e8a04482",
+                    "leftValue": "={{ $json.action?.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NOTIFY_REVIEW_QUEUE"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "DAILY_REPORT",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "450453ab-8ea8-517e-a6d7-4664e88f286f",
+                    "leftValue": "={{ $json.action?.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "DAILY_REPORT"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unhandled"
+        }
+      }
+    },
+    {
+      "id": "689e9824-3d05-550b-a0e9-3ad8595419e7",
+      "name": "Report Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e394e06-a923-59ae-a9cb-3aad2aacf5d2",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-08\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "cf8f2f95-c2fa-577f-ae91-3f227dcf2a4b",
+              "name": "report_date",
+              "value": "={{ $json.body?.report_date ?? $json.action?.payload?.report_date ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "1ba31fba-e01f-540f-ae84-d12ab1fd9ccd",
+              "name": "force",
+              "value": "={{ $json.body?.force === true }}",
+              "type": "boolean"
+            },
+            {
+              "id": "2312f8e9-66a4-5c8b-a390-48aae56386b7",
+              "name": "trigger_type",
+              "value": "={{ $json.body !== undefined ? \"WEBHOOK\" : ($json.action ? \"REPLAY\" : \"SCHEDULE\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a417cbb6-7a60-5a17-af17-49ed6c89a7f0",
+      "name": "Load Metrics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH d AS (\n  SELECT coalesce(NULLIF($2, '')::date,\n                  (now() AT TIME ZONE (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone'))::date - 1) AS report_date)\nSELECT d.report_date::text AS report_date,\n       api.start_workflow_execution($1::jsonb, $3, 'REPORT', d.report_date::text) AS run_id,\n       reporting.daily_metrics(d.report_date) AS metrics,\n       r.delivered_at,\n       coalesce((SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n                  WHERE s.is_active AND s.roles && ARRAY['HR_ADMIN', 'APPROVER_L2']),\n                (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'ops.alert_email')) AS recipients,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.name') AS company\n  FROM d LEFT JOIN ops.daily_reports r ON r.report_date = d.report_date",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.report_date, $json.trigger_type ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "a0499bc1-b718-52bb-ae67-3e94eb3f2d80",
+      "name": "Already Delivered?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f601586b-7723-5825-a59b-7dc782e41b92",
+              "leftValue": "={{ $json.delivered_at ? \"yes\" : \"\" }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            },
+            {
+              "id": "11f31fd0-1ed9-5a13-a1eb-884808bb8b62",
+              "leftValue": "={{ !$(\"Report Context\").first().json.force }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f3c32c1d-7f27-5080-af6b-ced9c0f223a2",
+      "name": "Finish: Already Delivered",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SKIPPED') AS duration_ms, 'SKIPPED' AS action_outcome, $2 AS action_reason, $3 AS report_date",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Report Context\").first().json.ctx), \"report for \" + $json.report_date + \" was already delivered\", $json.report_date ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "680501e9-69ad-50ed-a320-13f2ae91ee4d",
+      "name": "Summarize (SWF-01)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "aIsZuTp9Z6s1IqLi",
+          "cachedResultName": "SWF-01 Backend Call"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Report Context\").first().json.ctx }}",
+            "method": "POST",
+            "path": "/v1/reports/daily-summary",
+            "body": "={{ ({ report_date: $(\"Load Metrics\").first().json.report_date, metrics: $(\"Load Metrics\").first().json.metrics }) }}",
+            "fault_inject": "",
+            "entity_type": "REPORT",
+            "entity_id": "={{ $(\"Load Metrics\").first().json.report_date }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "path",
+              "displayName": "path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "fault_inject",
+              "displayName": "fault_inject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "288a3823-21ec-5c81-a2a4-45252bb5865b",
+      "name": "Compose Report",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1800,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fd454d2a-bc5d-5f6c-ad28-cdc827160e8e",
+              "name": "summary",
+              "value": "={{ $json.ok ? $json.body.summary : \"The summary service was unavailable; the figures below come directly from the database.\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7e1f4b59-069c-5f5e-acfd-f44e6741beb5",
+              "name": "summary_source",
+              "value": "={{ $json.ok ? $json.body.summary_source : \"TEMPLATE\" }}",
+              "type": "string"
+            },
+            {
+              "id": "d5cfd45b-5c82-58e7-a8fd-497bc07a5d9e",
+              "name": "subject",
+              "value": "={{ \"Daily hiring report \" + $(\"Load Metrics\").first().json.report_date + \" - \" + ($(\"Load Metrics\").first().json.company || \"NovaTech\") }}",
+              "type": "string"
+            },
+            {
+              "id": "37407384-5b16-5a25-a784-a8683184edf9",
+              "name": "html",
+              "value": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const m = $(\"Load Metrics\").first().json.metrics || {}; const label = k => k.replace(/_/g, \" \").replace(/^./, c => c.toUpperCase()); const sections = $json.ok ? $json.body.sections : [{ title: \"Metrics\", rows: Object.keys(m).filter(k => typeof m[k] === \"number\").sort().map(k => ({ label: label(k), value: m[k] })) }]; const table = sections.map(s => \"<h3 style='margin:18px 0 6px'>\" + esc(s.title) + \"</h3><table cellpadding='6' style='border-collapse:collapse;border:1px solid #d0d5dd'>\" + s.rows.map(r => \"<tr><td style='border:1px solid #d0d5dd'>\" + esc(r.label) + \"</td><td style='border:1px solid #d0d5dd;text-align:right'><b>\" + esc(r.value ?? \"-\") + \"</b></td></tr>\").join(\"\") + \"</table>\").join(\"\"); return layout(\"<h2 style='margin:0 0 8px'>Daily hiring report, \" + esc($(\"Load Metrics\").first().json.report_date) + \"</h2><p>\" + esc($json.ok ? $json.body.summary : \"The summary service was unavailable; the figures below come directly from the database.\") + \"</p>\" + table, \"All figures are computed by the database (reporting.daily_metrics). Summary: \" + esc($json.ok ? $json.body.summary_source : \"TEMPLATE\") + \".\"); })() }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c98d84b6-6fc8-52dd-a6d0-c1077e2f5eca",
+      "name": "Save Report",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2060,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.save_daily_report($1::date, $2::jsonb, $3, $4, $5::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Load Metrics\").first().json.report_date, JSON.stringify($(\"Load Metrics\").first().json.metrics), $json.summary, $json.summary_source, JSON.stringify($(\"Report Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "b1399f14-5280-51dd-a5d7-668da96d10da",
+      "name": "Send Report (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Report Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"report.daily:\" + $(\"Load Metrics\").first().json.report_date + ($(\"Report Context\").first().json.force ? \":\" + $execution.id : \"\") }}",
+            "channel": "EMAIL",
+            "template_key": "report.daily",
+            "recipient": "={{ $(\"Load Metrics\").first().json.recipients }}",
+            "subject": "={{ $(\"Compose Report\").first().json.subject }}",
+            "html": "={{ $(\"Compose Report\").first().json.html }}",
+            "application_id": "={{ \"\" }}",
+            "entity_type": "REPORT",
+            "entity_id": "={{ $(\"Load Metrics\").first().json.report_date }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "b2b02f52-c9ad-5847-a371-493f0c0c11ab",
+      "name": "Report Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2580,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "38c7570c-5bd6-512c-a94f-297cf48c5a53",
+              "leftValue": "={{ Boolean($json.status !== \"FAILED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4d8b519c-58d7-5cf8-ac86-13a6c1ddf6f9",
+      "name": "Mark Delivered",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2840,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.mark_daily_report_delivered($1::date, $2::jsonb) AS delivered_at, api.finish_workflow_execution($2::jsonb, 'SUCCEEDED') AS duration_ms,\n       'DONE' AS action_outcome, $3 AS action_reason, $1 AS report_date, $4 AS summary_source",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Load Metrics\").first().json.report_date, JSON.stringify($(\"Report Context\").first().json.ctx), $json.duplicate_suppressed ? \"daily report was already sent\" : \"daily report delivered\", $(\"Compose Report\").first().json.summary_source ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "416a35e1-e393-5e77-a55e-4667834a916e",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2840,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Report Context\").first().json.ctx }}",
+            "error": "={{ ({ workflow_name: \"WF-08\", node_name: \"Send Report (SWF-02)\", error_class: \"RETRYABLE\", error_code: \"REPORT_NOT_DELIVERED\", error_message: \"the daily report email could not be sent\", entity_type: \"REPORT\", entity_id: $(\"Load Metrics\").first().json.report_date, replay_workflow: \"WF-08\", payload: { action: { action_type: \"DAILY_REPORT\", payload: { report_date: $(\"Load Metrics\").first().json.report_date } } } }) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "d9e8e40d-7419-5a66-ae2c-cf72b8bbcd06",
+      "name": "Return: Report Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3100,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "664c4030-3334-51ff-a384-935eb15b9bdf",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "1315c059-e347-58da-aa0b-3a8b7c624754",
+              "name": "action_reason",
+              "value": "={{ \"report email failed; queued as error \" + $json.error_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f95bb72b-a644-5454-a16d-a9054321bef7",
+              "name": "error_id",
+              "value": "={{ $json.error_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a6bf6c0f-065c-56a0-adbb-c60a9608ff1a",
+      "name": "Review Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        760,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a2455607-cfc2-5a2e-a8e0-676745af0740",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-08\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.action.correlation_id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "54874c91-b600-5a13-a4ca-e98412b1096c",
+              "name": "action",
+              "value": "={{ $json.action }}",
+              "type": "object"
+            },
+            {
+              "id": "9a0a05ea-4976-58cc-a45c-d96482c1cbff",
+              "name": "application_id",
+              "value": "={{ $json.action.application_id || $json.action.entity_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d03e227a-db08-5a02-a77f-83ea7cd989f6",
+      "name": "Load Review Case",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1020,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', 'APPLICATION', $2) AS run_id,\n       api.application_snapshot($2::uuid) AS app,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND s.roles && ARRAY['RECRUITER', 'HR_ADMIN']) AS recruiters,\n       (SELECT s.email FROM hiring.applications a\n          JOIN hiring.job_positions p ON p.id = a.job_position_id\n          JOIN hiring.staff_members s ON s.id = p.hiring_manager_id\n         WHERE a.id = $2::uuid AND s.is_active) AS hiring_manager_email,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.portal_url') AS portal_url",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.application_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "4fc5b407-133b-5b1e-ad4c-9c02daed0b15",
+      "name": "Still Awaiting Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "004cecdb-e319-54cc-af91-515bbe9384cb",
+              "leftValue": "={{ Boolean([\"SCREENING_REVIEW\", \"INTERVIEW_REVIEW\"].includes($json.app?.status)) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ced94f8b-da53-511b-a7c9-963dd9bde9ec",
+      "name": "Notify Reviewers (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Review Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"review.queue:\" + $(\"Review Context\").first().json.action.id }}",
+            "channel": "EMAIL",
+            "template_key": "staff.review_needed",
+            "recipient": "={{ $json.app.status === \"INTERVIEW_REVIEW\" ? ($json.hiring_manager_email || $json.recruiters) : $json.recruiters }}",
+            "subject": "={{ \"[Action needed] \" + $json.app.application_code + \" \" + ($json.app.status === \"INTERVIEW_REVIEW\" ? \"needs a hiring decision\" : \"needs a screening review\") }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const a = $json.app; const n = v => v === null || v === undefined ? \"-\" : esc(v); const link = String($json.portal_url || \"\").replace(/\\/$/, \"\") + \"/staff/applications/\" + a.application_id; return layout(\"<p>An application needs a human decision.</p><table cellpadding='5' style='border-collapse:collapse'>\" + [[\"Application\", a.application_code], [\"Candidate\", a.candidate.full_name], [\"Position\", a.position.title], [\"Status\", a.status], [\"Reason\", a.review_reason], [\"Screening score\", a.application_score], [\"AI recommendation (advisory)\", a.ai_recommendation], [\"Interview score\", a.interview_score], [\"Final score\", a.final_score]].map(r => \"<tr><td style='color:#667085'>\" + r[0] + \"</td><td><b>\" + n(r[1]) + \"</b></td></tr>\").join(\"\") + \"</table><p><a href='\" + esc(link) + \"'>Open the application</a> to decide. Decisions are recorded with your name and reason.</p>\", \"Correlation id \" + esc(a.correlation_id)); })() }}",
+            "application_id": "={{ $json.app.application_id }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $json.app.application_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "dc9411d8-7541-5376-a876-ce532ec03e68",
+      "name": "Finish: Reviewers Notified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1800,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms, $3 AS action_outcome, $4 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Review Context\").first().json.ctx), $json.status === \"FAILED\" ? \"FAILED\" : \"SUCCEEDED\", $json.status === \"FAILED\" ? \"FAILED\" : \"DONE\", $json.status === \"FAILED\" ? \"review alert email failed (will retry)\" : ($json.duplicate_suppressed ? \"review alert already sent\" : \"review alert sent\") ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "d8e7d2ea-c5cb-5594-a241-14f817e756a1",
+      "name": "Finish: No Longer Needed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        920
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SKIPPED') AS duration_ms, 'SKIPPED' AS action_outcome, $2 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Review Context\").first().json.ctx), \"application is \" + ($json.app?.status || \"missing\") + \"; no review needed\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "6b83cdbc-7a6a-5bda-ab56-46cf6faa2c06",
+      "name": "Unknown Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        760,
+        720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b68bce4d-dd79-5b84-a13f-2dbcd3366328",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "f2c6fafd-b5bf-565f-a32d-2adb8b1f861e",
+              "name": "action_reason",
+              "value": "={{ \"WF-08 has no handler for \" + ($json.action?.action_type || \"unknown\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c1e6587b-65c8-5fac-a8fe-b5d95b51e9a3",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "parameters": {
+        "content": "## WF-08 Monitoring & Reporting\n**Daily report** (09:00 company time; on demand: `POST /webhook/ops/daily-report` with header auth and `{\"report_date\": \"YYYY-MM-DD\", \"force\": false}`): every number comes from `reporting.daily_metrics`. The backend writes the prose and rejects AI text that contains any number not in the metrics. One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).\n**Review alerts**: WF-00 action `NOTIFY_REVIEW_QUEUE` emails recruiters (screening review) or the hiring manager (interview review) after re-checking that the case still needs a person.",
+        "width": 620,
+        "height": 300,
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "Report Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Report On Demand": {
+      "main": [
+        [
+          {
+            "node": "Report Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Called by Workflow": {
+      "main": [
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [
+          {
+            "node": "Review Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Context": {
+      "main": [
+        [
+          {
+            "node": "Load Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Metrics": {
+      "main": [
+        [
+          {
+            "node": "Already Delivered?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Delivered?": {
+      "main": [
+        [
+          {
+            "node": "Finish: Already Delivered",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize (SWF-01)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize (SWF-01)": {
+      "main": [
+        [
+          {
+            "node": "Compose Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Report": {
+      "main": [
+        [
+          {
+            "node": "Save Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Report (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Report Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Sent?": {
+      "main": [
+        [
+          {
+            "node": "Mark Delivered",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failure (SWF-03)": {
+      "main": [
+        [
+          {
+            "node": "Return: Report Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Context": {
+      "main": [
+        [
+          {
+            "node": "Load Review Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Review Case": {
+      "main": [
+        [
+          {
+            "node": "Still Awaiting Review?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still Awaiting Review?": {
+      "main": [
+        [
+          {
+            "node": "Notify Reviewers (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish: No Longer Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Reviewers (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Finish: Reviewers Notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover",
+    "timezone": "Asia/Karachi"
+  },
+  "staticData": {
+    "node:Daily 09:00": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "ad2f3968-2b2d-423f-a679-5daa0627841b",
+  "activeVersionId": "ad2f3968-2b2d-423f-a679-5daa0627841b",
+  "versionCounter": 1,
+  "triggerCount": 2,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T21:02:46.801Z",
+      "createdAt": "2026-10-01T21:02:46.801Z",
+      "role": "workflow:owner",
+      "workflowId": "ntWf08Monitoring",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

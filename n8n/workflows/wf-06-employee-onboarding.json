@@ -1,0 +1,1622 @@
+{
+  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "createdAt": "2026-10-01T21:02:46.801Z",
+  "id": "ntWf06Onboarding",
+  "name": "WF-06 Employee Onboarding",
+  "description": "WF-06: creates the employee exactly once from the accepted offer (NT-YYYY-NNN), simulated account provisioning, welcome + orientation, HR/manager notices, completion notice and hourly overdue-task reminders.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "60ac9807-0172-5aa1-a3c1-cf07b1e6e98a",
+      "name": "When Called by Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "action",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e3427264-1f87-5fc7-a24c-c44759a7ceca",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b3a2db4d-8b8a-5f29-af8e-fe15008d62b3",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-06\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.action.correlation_id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "d04a2b32-4bf3-5dff-a65a-35bc16f9ddbc",
+              "name": "action",
+              "value": "={{ $json.action }}",
+              "type": "object"
+            },
+            {
+              "id": "eb62a50c-63cd-5199-a2d3-4061b015a35d",
+              "name": "application_id",
+              "value": "={{ $json.action.application_id || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e0a2f874-580a-5677-a5c8-5e06f9e29efb",
+              "name": "entity_type",
+              "value": "={{ $json.action.entity_type || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7bea0c12-e153-5b79-a619-447b242598e0",
+              "name": "entity_id",
+              "value": "={{ $json.action.entity_id || \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "02a892bd-5478-58bd-a976-84bfb589a026",
+      "name": "Start Log & Load State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', 'APPLICATION', $2) AS run_id,\n       api.application_snapshot($2::uuid) AS app,\n       (SELECT o.id FROM hiring.offers o\n         WHERE o.application_id = $2::uuid AND o.status = 'ACCEPTED' ORDER BY o.revision DESC LIMIT 1) AS accepted_offer_id,\n       (SELECT api.employee_snapshot(e.id) FROM hiring.employees e WHERE e.application_id = $2::uuid) AS employee,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone') AS timezone,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND 'HR_ADMIN' = ANY (s.roles)) AS hr_emails",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.application_id || $json.entity_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "0cff76cd-c856-5d13-ae17-68291d04a33a",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "START_ONBOARDING",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2f619402-72ef-5537-a8d3-4207601d7d77",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "START_ONBOARDING"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "NOTIFY_ONBOARDING_COMPLETE",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5686af15-5dfb-54e1-a6b5-5ea79e285159",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NOTIFY_ONBOARDING_COMPLETE"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unhandled"
+        }
+      }
+    },
+    {
+      "id": "5d48ab28-f59b-5ed4-a85b-b1eb326364ee",
+      "name": "Finish & Return",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2840,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms, $3 AS action_outcome, $4 AS action_reason",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").first().json.ctx), ({ DONE: \"SUCCEEDED\", SKIPPED: \"SKIPPED\" })[$json.action_outcome] || \"FAILED\", $json.action_outcome, $json.action_reason ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "553cb91d-7f24-5096-a16a-97b1d580814b",
+      "name": "Skip: No Longer Applies",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fe555ff1-ebf8-5edb-a54a-a48f1105f5d0",
+              "name": "action_outcome",
+              "value": "SKIPPED",
+              "type": "string"
+            },
+            {
+              "id": "abd53273-4dc1-5a51-ad56-68cf07cb810a",
+              "name": "action_reason",
+              "value": "={{ (() => { const s = $(\"Start Log & Load State\").first().json; const parts = []; if (s.app) parts.push(\"application \" + s.app.status); for (const k of [\"interview\", \"offer\", \"employee\"]) if (s[k]) parts.push(k + \" \" + s[k].status); return $(\"Build Context\").first().json.action.action_type + \" no longer applies (\" + (parts.join(\", \") || \"entity missing\") + \")\"; })() }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "da4d882b-fd31-5f70-a8b5-b22ec099a0da",
+      "name": "Result: Notification",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2580,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b359a5a9-7e0b-5f71-ada4-e7880b097c99",
+              "name": "action_outcome",
+              "value": "={{ [\"Welcome Employee (SWF-02)\", \"Notify HR & Manager (SWF-02)\", \"Announce Completion (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c31a272b-181f-5170-aec1-1f9928611a06",
+              "name": "action_reason",
+              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Welcome Employee (SWF-02)\", \"Notify HR & Manager (SWF-02)\", \"Announce Completion (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d414ed00-bfaf-5f78-ac35-2512ccbfe544",
+      "name": "Retryable Failure?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        240,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cf54e308-99c1-53a3-aecd-1f61278fea30",
+              "leftValue": "={{ Boolean($json.error_class === \"RETRYABLE\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2f3f970c-776e-57d6-a3b5-43574974ac32",
+      "name": "Result: Retry Later",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "38c67552-2230-53ea-ae50-167f1398bb32",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "16ae6db3-c36a-55d9-a039-98ac2dd5cba9",
+              "name": "action_reason",
+              "value": "={{ ($json.error_code || \"RETRYABLE\") + \": \" + ($json.error_message || \"temporary failure\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e27c3cec-d52e-5882-a99c-193488151c93",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2060,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "error": "={{ (() => { const db = $json.error !== undefined; const msg = db ? String($json.error?.message ?? $json.error) : String($json.error_message || \"step failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const a = $(\"Build Context\").first().json.action; return { workflow_name: \"WF-06\", node_name: a.action_type, error_class: db ? (m ? \"NON_RETRYABLE\" : \"UNKNOWN\") : ($json.error_class || \"NON_RETRYABLE\"), error_code: db ? (m ? m[1] : \"DB_ERROR\") : ($json.error_code || \"STEP_FAILED\"), error_message: msg, http_status: db ? null : ($json.status || null), retry_count: db ? 0 : ($json.attempts || 0), entity_type: a.entity_type, entity_id: a.entity_id, replay_workflow: \"WF-06\", payload: { action: a } }; })() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "55e06886-a3dd-53e7-a4ca-a05b617ced3b",
+      "name": "Result: Moved to Error Queue",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2320,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "94f4101d-aade-583e-a311-a83c633784ef",
+              "name": "action_outcome",
+              "value": "DONE",
+              "type": "string"
+            },
+            {
+              "id": "1c6fc7e1-cba5-5a54-afe5-7f0f8695d74b",
+              "name": "action_reason",
+              "value": "={{ \"permanent failure moved to the error queue (\" + $json.error_id + \")\" }}",
+              "type": "string"
+            },
+            {
+              "id": "1e66ee86-8183-53b1-a029-45b7c71702b8",
+              "name": "error_id",
+              "value": "={{ $json.error_id }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "36208091-b014-57fb-afee-8d0332d4e2d4",
+      "name": "Ready to Onboard?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3da01158-5a94-5826-aae6-ca8939d7355f",
+              "leftValue": "={{ Boolean([\"ACCEPTED\", \"ONBOARDING\"].includes($(\"Start Log & Load State\").first().json.app?.status) && $(\"Start Log & Load State\").first().json.accepted_offer_id) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e574dd35-8397-5b28-a967-68baa8375aea",
+      "name": "Create Employee",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.create_employee_from_offer($1::uuid, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Start Log & Load State\").first().json.accepted_offer_id, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "790b849e-2dd7-5337-a2bd-dc8c19440d8a",
+      "name": "Provision Account (Simulated)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1800,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.mark_account_provisioned($1::uuid, $2::jsonb) AS provisioned_at, api.employee_snapshot($1::uuid) AS employee",
+        "options": {
+          "queryReplacement": "={{ [ $json.employee_id, JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "8c45e869-a014-512e-aafe-8feffe44cffb",
+      "name": "Welcome Employee (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2060,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"onboarding.welcome:\" + $(\"Provision Account (Simulated)\").first().json.employee.employee_id }}",
+            "channel": "EMAIL",
+            "template_key": "onboarding.welcome",
+            "recipient": "={{ $(\"Provision Account (Simulated)\").first().json.employee.personal_email || $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"Welcome to \" + $(\"Start Log & Load State\").first().json.app.company.name + \", \" + $(\"Provision Account (Simulated)\").first().json.employee.full_name.split(\" \")[0] + \"!\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + start.toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + end.toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const s = $(\"Start Log & Load State\").first().json; const e = $(\"Provision Account (Simulated)\").first().json.employee; const tz = s.timezone; const start = DateTime.fromISO(e.joining_date, { zone: tz }).set({ hour: 9, minute: 30 }); const yours = (e.tasks || []).filter(t => t.owner_role === \"EMPLOYEE\"); return layout(\"<p>Dear \" + esc(e.full_name) + \",</p><p>Welcome to <b>\" + esc(s.app.company.name) + \"</b>! We are excited to have you join us as <b>\" + esc(e.position) + \"</b> in \" + esc(e.department) + \".</p><table cellpadding='4'><tr><td style='color:#667085'>Employee ID</td><td><b>\" + esc(e.employee_code) + \"</b></td></tr><tr><td style='color:#667085'>Company email</td><td>\" + esc(e.company_email) + \" (login details follow from IT on your first day)</td></tr><tr><td style='color:#667085'>First day</td><td><b>\" + esc(fmtDate(e.joining_date)) + \"</b></td></tr><tr><td style='color:#667085'>Manager</td><td>\" + esc(e.manager?.full_name || \"-\") + \"</td></tr></table><p><b>Orientation:</b> \" + esc(start.toFormat(\"cccc d LLLL yyyy, h:mm a\")) + \" with HR. <a href='\" + esc(gcal(\"Orientation at \" + s.app.company.name, start, start.plus({ hours: 2 }), \"Welcome session for \" + e.full_name + \" (\" + e.employee_code + \")\")) + \"'>Add to calendar</a></p>\" + (yours.length ? \"<p>Before or on your first day, please:</p><ul>\" + yours.map(t => \"<li>\" + esc(t.title) + \" (by \" + esc(fmtDate(t.due_date)) + \")</li>\").join(\"\") + \"</ul>\" : \"\") + \"<p>See you soon!<br/>\" + esc(s.app.company.name) + \" Human Resources</p>\", \"Employee \" + esc(e.employee_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "EMPLOYEE",
+            "entity_id": "={{ $(\"Provision Account (Simulated)\").first().json.employee.employee_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "206ceb2e-b561-5de9-ab1b-701b7343c2b4",
+      "name": "Notify HR & Manager (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"onboarding.started:\" + $(\"Provision Account (Simulated)\").first().json.employee.employee_id }}",
+            "channel": "EMAIL",
+            "template_key": "onboarding.started",
+            "recipient": "={{ [$(\"Start Log & Load State\").first().json.hr_emails, $(\"Provision Account (Simulated)\").first().json.employee.manager?.email, $(\"Provision Account (Simulated)\").first().json.employee.it_email].filter(Boolean).join(\",\") }}",
+            "subject": "={{ \"Onboarding started: \" + $(\"Provision Account (Simulated)\").first().json.employee.full_name + \" (\" + $(\"Provision Account (Simulated)\").first().json.employee.employee_code + \"), joining \" + DateTime.fromISO($(\"Provision Account (Simulated)\").first().json.employee.joining_date).toFormat(\"d LLL\") }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const e = $(\"Provision Account (Simulated)\").first().json.employee; return layout(\"<p><b>\" + esc(e.full_name) + \"</b> accepted the offer and joins as <b>\" + esc(e.position) + \"</b> on <b>\" + esc(fmtDate(e.joining_date)) + \"</b>. Employee record \" + esc(e.employee_code) + \" was created and the company account \" + esc(e.company_email) + \" was provisioned (simulated).</p><table cellpadding='6' style='border-collapse:collapse;border:1px solid #d0d5dd'><tr style='background:#f2f4f7'><th align='left'>Task</th><th align='left'>Owner</th><th align='left'>Due</th><th align='left'>Status</th></tr>\" + (e.tasks || []).map(t => \"<tr><td>\" + esc(t.title) + \"</td><td>\" + esc(t.owner_role) + \"</td><td>\" + esc(fmtDate(t.due_date)) + \"</td><td>\" + esc(t.status) + \"</td></tr>\").join(\"\") + \"</table><p>Owners get a reminder when a task becomes overdue. Mark tasks done as you complete them; onboarding closes automatically when all are done.</p>\", \"Correlation id \" + esc(e.correlation_id)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "EMPLOYEE",
+            "entity_id": "={{ $(\"Provision Account (Simulated)\").first().json.employee.employee_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "91f1c7f8-24d9-521f-ae1b-ea30c4967d91",
+      "name": "Onboarded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d2c1e197-14f9-5d55-a93d-83a03baa65a7",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.app?.status === \"ONBOARDED\" && $(\"Start Log & Load State\").first().json.employee) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8fad5d6b-7983-5847-a9aa-5dca129ddc60",
+      "name": "Announce Completion (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"onboarding.complete:\" + $(\"Start Log & Load State\").first().json.employee.employee_id }}",
+            "channel": "EMAIL",
+            "template_key": "onboarding.complete",
+            "recipient": "={{ [$(\"Start Log & Load State\").first().json.hr_emails, $(\"Start Log & Load State\").first().json.employee.manager?.email].filter(Boolean).join(\",\") }}",
+            "subject": "={{ \"Onboarding complete: \" + $(\"Start Log & Load State\").first().json.employee.full_name + \" (\" + $(\"Start Log & Load State\").first().json.employee.employee_code + \")\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const e = $(\"Start Log & Load State\").first().json.employee; return layout(\"<p>All onboarding tasks for <b>\" + esc(e.full_name) + \"</b> (\" + esc(e.employee_code) + \", \" + esc(e.position) + \") are complete. The hiring journey for this person is closed.</p>\", \"Correlation id \" + esc(e.correlation_id)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "EMPLOYEE",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.employee.employee_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "459c8e8d-35fd-5f2d-afce-47411594db7b",
+      "name": "Result: Unknown Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1280,
+        720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e61e6e1-95ef-546d-acf9-7f4d832c902a",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "7868cdda-0583-58a0-a7d5-ee7866845d26",
+              "name": "action_reason",
+              "value": "={{ \"WF-06 has no handler for \" + $(\"Build Context\").first().json.action.action_type }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c0505608-4a6a-5c14-ab97-9879b960d9f5",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        720
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "79a3a436-1768-5924-ae14-fa1952f790f1",
+      "name": "Sweep Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d24b4772-8ec9-54ff-aa76-23987715aab7",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-06\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "45e4bb99-dc5f-57e3-a055-1b108c20f034",
+      "name": "Claim Overdue Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        760,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.claim_overdue_onboarding_tasks($1::jsonb, 50)",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "a3ed758d-defd-5e64-ad6c-e30333590b26",
+      "name": "Start Sweep Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1020,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SCHEDULE', 'ONBOARDING_TASK', $2) AS run_id,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND 'HR_ADMIN' = ANY (s.roles)) AS hr_emails",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Sweep Context\").first().json.ctx), $input.all().length + \" overdue task(s)\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "6644f469-e9c0-5c26-a704-8ee800dbf03f",
+      "name": "Overdue Tasks",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1280,
+        920
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4f8908d6-0f9d-511c-af43-05ab836f3cf9",
+              "name": "tasks",
+              "value": "={{ $(\"Claim Overdue Tasks\").all().map(i => i.json) }}",
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "2a92b9f9-ea4e-5825-a216-395ddc4b97c4",
+      "name": "One Item per Task",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        920
+      ],
+      "parameters": {
+        "fieldToSplitOut": "tasks",
+        "include": "noOtherFields",
+        "options": {}
+      }
+    },
+    {
+      "id": "67ce7e42-f59e-5ecf-a6e9-faabeb75f0a5",
+      "name": "Remind Task Owner (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        520
+      ],
+      "parameters": {
+        "mode": "each",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ ({ ...$(\"Sweep Context\").first().json.ctx, correlation_id: $json.correlation_id }) }}",
+            "dedupe_key": "={{ \"onboarding.overdue:\" + $json.task_id + \":\" + $json.reminder_count }}",
+            "channel": "EMAIL",
+            "template_key": "onboarding.task_overdue",
+            "recipient": "={{ $json.assignee_email || $(\"Start Sweep Log\").first().json.hr_emails }}",
+            "subject": "={{ \"[Overdue] \" + $json.task_title + \" for \" + $json.employee_name + \" (\" + $json.employee_code + \")\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const t = $json; return layout(\"<p>Hi \" + esc(t.assignee_name || \"team\") + \",</p><p>The onboarding task <b>\" + esc(t.task_title) + \"</b> for \" + esc(t.employee_name) + \" (\" + esc(t.employee_code) + \") was due on \" + esc(fmtDate(t.due_date)) + \" and is <b>\" + t.days_overdue + \" day(s) overdue</b>.</p><p>Please complete it and mark it done so the new employee's onboarding can close.</p>\", \"Reminder \" + t.reminder_count + \" &middot; owner \" + esc(t.owner_role)); })() }}",
+            "application_id": "={{ $json.application_id }}",
+            "entity_type": "ONBOARDING_TASK",
+            "entity_id": "={{ $json.task_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "adba8b6e-d2a4-5d05-a187-d0e0745633cf",
+      "name": "Finish Sweep",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2060,
+        720
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms, $3::int AS reminders",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Sweep Context\").first().json.ctx), $input.all().some(i => i.json.status === \"FAILED\") ? \"FAILED\" : \"SUCCEEDED\", $input.all().length ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "b93df8e5-b2e0-5dc3-a7a9-15b59dd54297",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "parameters": {
+        "content": "## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep**: `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.",
+        "width": 620,
+        "height": 300,
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "When Called by Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Start Log & Load State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Log & Load State": {
+      "main": [
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip: No Longer Applies": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Notification": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retryable Failure?": {
+      "main": [
+        [
+          {
+            "node": "Result: Retry Later",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Retry Later": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Failure (SWF-03)": {
+      "main": [
+        [
+          {
+            "node": "Result: Moved to Error Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [
+          {
+            "node": "Ready to Onboard?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Onboarded?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Unknown Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready to Onboard?": {
+      "main": [
+        [
+          {
+            "node": "Create Employee",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Employee": {
+      "main": [
+        [
+          {
+            "node": "Provision Account (Simulated)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provision Account (Simulated)": {
+      "main": [
+        [
+          {
+            "node": "Welcome Employee (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Welcome Employee (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Notify HR & Manager (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify HR & Manager (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Onboarded?": {
+      "main": [
+        [
+          {
+            "node": "Announce Completion (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Announce Completion (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: Unknown Action": {
+      "main": [
+        [
+          {
+            "node": "Finish & Return",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Sweep Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sweep Context": {
+      "main": [
+        [
+          {
+            "node": "Claim Overdue Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Overdue Tasks": {
+      "main": [
+        [
+          {
+            "node": "Start Sweep Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Sweep Log": {
+      "main": [
+        [
+          {
+            "node": "Overdue Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Overdue Tasks": {
+      "main": [
+        [
+          {
+            "node": "One Item per Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One Item per Task": {
+      "main": [
+        [
+          {
+            "node": "Remind Task Owner (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remind Task Owner (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Finish Sweep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover"
+  },
+  "staticData": {
+    "node:Every Hour": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "28794558-556c-47a1-8325-ea67e6e6d2cb",
+  "activeVersionId": "28794558-556c-47a1-8325-ea67e6e6d2cb",
+  "versionCounter": 1,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T21:02:46.801Z",
+      "createdAt": "2026-10-01T21:02:46.801Z",
+      "role": "workflow:owner",
+      "workflowId": "ntWf06Onboarding",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-01T19:55:17.607Z",
+  "updatedAt": "2026-10-02T18:34:44.239Z",
   "createdAt": "2026-10-01T19:55:17.607Z",
   "id": "zNrGlzM4KLrFVMAo",
   "name": "SWF-02 Send Notification",
@@ -387,7 +387,9 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "errorWorkflow": "ntWf07ErrRecover",
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "meta": {
@@ -398,7 +400,7 @@
   "pinData": null,
   "versionId": "a333b2c5-8f72-402b-9243-215f09a54a95",
   "activeVersionId": "a333b2c5-8f72-402b-9243-215f09a54a95",
-  "versionCounter": 1,
+  "versionCounter": 2,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

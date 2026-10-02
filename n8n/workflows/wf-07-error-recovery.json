@@ -1,0 +1,1597 @@
+{
+  "updatedAt": "2026-10-01T21:02:46.801Z",
+  "createdAt": "2026-10-01T21:02:46.801Z",
+  "id": "ntWf07ErrRecover",
+  "name": "WF-07 Error & Recovery",
+  "description": "WF-07: error workflow of every NovaTech workflow (crash → error queue), 5-minute error digest to operations, and authenticated replay of error-queue entries (POST /webhook/ops/replay).",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "d8c26792-8449-5daf-aee5-abba6288105f",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b92dad8e-3f1d-545a-a453-332f8d7d34db",
+      "name": "Describe Crash",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9912c83c-d8ae-5956-acfd-f8acd6c7f398",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-07\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "2a469249-370e-5720-a6c5-49494a63ff94",
+              "name": "crashed_workflow",
+              "value": "={{ (($json.workflow?.name || \"\").match(/^(S?WF-\\d+)/) || [])[1] || $json.workflow?.name || \"UNKNOWN\" }}",
+              "type": "string"
+            },
+            {
+              "id": "352594d9-3d79-5583-a094-e9fffbc6b59d",
+              "name": "crashed_execution_id",
+              "value": "={{ String($json.execution?.id ?? $json.trigger?.error?.timestamp ?? \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "d43fc5ac-3954-58fe-a5fb-061cf825269a",
+              "name": "error",
+              "value": "={{ ({ workflow_name: (($json.workflow?.name || \"\").match(/^(S?WF-\\d+)/) || [])[1] || $json.workflow?.name || \"UNKNOWN\", node_name: $json.execution?.lastNodeExecuted || $json.trigger?.error?.node?.name || \"trigger\", error_class: \"UNKNOWN\", error_code: \"WORKFLOW_CRASHED\", error_message: String($json.execution?.error?.message || $json.trigger?.error?.message || \"the workflow stopped with an unhandled error\").slice(0, 2000), entity_type: \"WORKFLOW_EXECUTION\", entity_id: String($json.execution?.id ?? \"\"), execution_id: String($json.execution?.id ?? \"\"), payload: { workflow_id: $json.workflow?.id, execution_url: $json.execution?.url, mode: $json.execution?.mode } }) }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c6a9792d-7343-5294-ac0f-45183dd2340e",
+      "name": "Record Crash",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.record_error($1::jsonb, $2::jsonb) AS error_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.error), JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "b9c32d44-b648-5803-a820-b2739cf10b6e",
+      "name": "Close Crashed Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, 'FAILED', $2::uuid) AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify({ ...$(\"Describe Crash\").first().json.ctx, workflow_name: $(\"Describe Crash\").first().json.crashed_workflow, execution_id: $(\"Describe Crash\").first().json.crashed_execution_id || $execution.id }), $json.error_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "990a32d8-3747-550e-a998-dc981ceefd84",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        520
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cd7bac80-b3de-5563-a9d5-3a2383fff8cb",
+      "name": "Alert Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7962de74-c521-533b-a1c0-5b229eb4ab71",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-07\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2519edd5-0f5c-526c-a4e4-0e7bb0ae8542",
+      "name": "Claim Unalerted Errors",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        760,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.claim_unalerted_errors($1::jsonb, 50)",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "80682157-9ac5-5559-ae78-7f8ee1d8f853",
+      "name": "Start Alert Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1020,
+        520
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SCHEDULE', 'ERROR', $2) AS run_id,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'ops.alert_email') AS ops_email,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.portal_url') AS portal_url",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Alert Context\").first().json.ctx), $input.all().length + \" new error(s)\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "1907164b-49b9-5d0f-aa22-7fc4771eb30f",
+      "name": "Send Error Digest (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Alert Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"ops.error_digest:\" + $(\"Claim Unalerted Errors\").first().json.error_id }}",
+            "channel": "EMAIL",
+            "template_key": "ops.error_digest",
+            "recipient": "={{ $json.ops_email }}",
+            "subject": "={{ \"[NovaTech automation] \" + $(\"Claim Unalerted Errors\").all().length + \" error(s) need attention\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const rows = $(\"Claim Unalerted Errors\").all().map(i => i.json); return layout(\"<p>These automation errors were recorded and need a decision (fix the cause, then replay or ignore with a note):</p><table cellpadding='6' style='border-collapse:collapse;border:1px solid #d0d5dd;font-size:13px'><tr style='background:#f2f4f7'><th align='left'>Workflow / step</th><th align='left'>Class</th><th align='left'>Code</th><th align='left'>Message</th><th align='left'>Entity</th><th align='left'>Seen</th></tr>\" + rows.map(r => \"<tr><td>\" + esc(r.workflow_name) + \" / \" + esc(r.node_name || \"-\") + \"</td><td>\" + esc(r.error_class) + \"</td><td><b>\" + esc(r.error_code) + \"</b></td><td>\" + esc(String(r.error_message || \"\").slice(0, 300)) + \"</td><td>\" + esc((r.entity_type || \"\") + \" \" + (r.correlation_id || \"\")) + \"</td><td>\" + r.occurrence_count + \"x</td></tr>\").join(\"\") + \"</table><p>Replay: <code>POST /v1/staff/errors/{error_id}/replay</code> (or from the operations dashboard). Replays are idempotent.</p>\", \"Error ids: \" + rows.map(r => esc(r.error_id)).join(\", \")); })() }}",
+            "application_id": "={{ \"\" }}",
+            "entity_type": "ERROR",
+            "entity_id": "={{ \"\" }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "755ce11a-d411-5285-ae71-db6b452f841a",
+      "name": "Finish Alert Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.finish_workflow_execution($1::jsonb, $2) AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Alert Context\").first().json.ctx), $json.status === \"FAILED\" ? \"FAILED\" : \"SUCCEEDED\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "18d8abdd-cf01-5459-ac63-c5061b40a98c",
+      "name": "Replay Requested",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        720
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ops/replay",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ntBackendApiKey1",
+          "name": "NovaTech Backend API key"
+        }
+      },
+      "webhookId": "ab4b2662-8ace-5f00-a9f5-a73f6421fad7"
+    },
+    {
+      "id": "b7ed4c41-ca29-59c3-ac81-232ed1d9b09d",
+      "name": "Replay Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        500,
+        720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ac3e47a4-bf20-575a-a089-26a9931d326a",
+              "name": "ctx",
+              "value": "={{ ({ actor_type: $json.body?.requested_by ? \"STAFF\" : \"SYSTEM\", actor_id: $json.body?.requested_by || \"n8n-ops\", workflow_name: \"WF-07\", workflow_version: \"1.0.0\", execution_id: $execution.id }) }}",
+              "type": "object"
+            },
+            {
+              "id": "d6960dda-f3a8-51bf-ae81-3352370a0bbc",
+              "name": "error_id",
+              "value": "={{ String($json.body?.error_id || \"\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f6b7bb0a-5227-5db8-a650-8787c02dad54",
+      "name": "Valid Error Id?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        760,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c6ff4249-1ae2-55ae-a333-8114318bd1ff",
+              "leftValue": "={{ Boolean(/^[0-9a-f-]{36}$/i.test($json.error_id)) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4930cd9e-e967-5221-ab23-e296617b880f",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1020,
+        720
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ code: \"ERROR_ID_REQUIRED\", detail: \"body must contain error_id (uuid)\" }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "3a75a32b-e7dc-5022-af62-b652a1b47cfb",
+      "name": "Begin Replay",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1020,
+        920
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM api.begin_error_replay($1::uuid, $2::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [ $json.error_id, JSON.stringify($json.ctx) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "10398b29-d986-5e3d-afab-dd6e2f0293bd",
+      "name": "Respond 409",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1280,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ (() => { const m = String($json.error?.message ?? $json.error ?? \"replay refused\"); const c = m.match(/^([A-Z][A-Z0-9_]+): (.*)$/); return { code: c ? c[1] : \"REPLAY_REFUSED\", detail: c ? c[2] : m }; })() }}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "7edbcdda-0b52-59f3-a25a-e93c4449f42a",
+      "name": "Start Replay Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1280,
+        720
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'REPLAY', 'ERROR', $2) AS run_id",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify({ ...$(\"Replay Request\").first().json.ctx, correlation_id: $json.correlation_id }), $json.error_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      }
+    },
+    {
+      "id": "0bb8b266-632f-539f-a2c8-8a1088705b0f",
+      "name": "Route by Replay Target",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "WF-00",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c31004cf-9919-5bba-a8bb-cebd197f0529",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-00"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-01",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "1cdfb0eb-cf27-5559-a854-536bec750b1e",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-01"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-02",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "dd107b82-d5f6-5243-a177-0deaa823e729",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-02"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-03",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "981f5f1a-7a66-5f80-a63c-b058dafa4df0",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-03"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-04",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "22f87265-4b00-5eb2-a54c-fd2911d14b47",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-04"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-05",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a2cdd53c-d4cf-5edc-a947-340855079296",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-05"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-06",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "334fed95-14d5-5537-a31a-12bf5ed3eb40",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-06"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "WF-08",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "095f823d-f5b8-508c-a850-32d7da5352ba",
+                    "leftValue": "={{ $(\"Begin Replay\").first().json.replay_workflow }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "WF-08"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "no replay handler"
+        }
+      }
+    },
+    {
+      "id": "5eda21f0-b342-5c7d-a355-107f084e6dab",
+      "name": "Requeue Scheduled Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1800,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.requeue_scheduled_action(($1::jsonb ->> 'scheduled_action_id')::uuid, $2::jsonb) AS status",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($(\"Begin Replay\").first().json.payload), JSON.stringify({ ...$(\"Replay Request\").first().json.ctx, correlation_id: $(\"Begin Replay\").first().json.correlation_id }) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a52a87bf-2387-543e-a6eb-abb9b1f3e05b",
+      "name": "Outcome: Requeued",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2060,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "48a50349-ec66-5556-adbc-4b4375011960",
+              "name": "replay_ok",
+              "value": "true",
+              "type": "boolean"
+            },
+            {
+              "id": "21500e39-19f2-57a0-a278-e20f9494f822",
+              "name": "detail",
+              "value": "scheduled action requeued; the dispatcher runs it within a minute",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e96da407-3932-5704-a2c0-6f2ee8827cd6",
+      "name": "Resubmit to Intake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1800,
+        520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:5678/webhook/applications",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "={{ $(\"Begin Replay\").first().json.payload.idempotency_key }}"
+            },
+            {
+              "name": "X-Correlation-ID",
+              "value": "={{ $(\"Begin Replay\").first().json.correlation_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Begin Replay\").first().json.payload.body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "4176b55c-a538-5454-a1f5-61544b6aa657",
+      "name": "Outcome: Intake",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2060,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5a8a1167-bf86-5628-a171-eb1c393c3013",
+              "name": "replay_ok",
+              "value": "={{ [200, 202].includes($json.statusCode) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "071cf129-180b-5bad-a175-cf5fa7b3711c",
+              "name": "detail",
+              "value": "={{ \"intake answered HTTP \" + ($json.statusCode ?? \"error\") + \": \" + JSON.stringify($json.body ?? $json.error ?? {}).slice(0, 300) }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6659dfad-9434-516e-afe7-8e83981db94c",
+      "name": "Replay Candidate Processing",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        720
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "76ahG9hzRP7cuQL4",
+          "cachedResultName": "WF-02 Candidate Processing"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "mode": "={{ $(\"Begin Replay\").first().json.payload.mode || \"intake\" }}",
+            "event_id": "={{ $(\"Begin Replay\").first().json.payload.event_id || \"\" }}",
+            "correlation_id": "={{ $(\"Begin Replay\").first().json.payload.correlation_id || $(\"Begin Replay\").first().json.correlation_id }}",
+            "validation": "={{ $(\"Begin Replay\").first().json.payload.validation || {} }}",
+            "action": "={{ $(\"Begin Replay\").first().json.payload.action || {} }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "event_id",
+              "displayName": "event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "correlation_id",
+              "displayName": "correlation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "validation",
+              "displayName": "validation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f75737a8-0682-5d91-a4f6-1ff604bdb3ba",
+      "name": "Outcome: Candidate Processing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2060,
+        720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "57233df6-aacd-5613-a44b-a6caf467a91c",
+              "name": "replay_ok",
+              "value": "={{ !$json.error && !$json.error_id && $json.action_outcome !== \"FAILED\" }}",
+              "type": "boolean"
+            },
+            {
+              "id": "2e109c24-5296-58d2-ac33-684abab24e62",
+              "name": "detail",
+              "value": "={{ $json.error ? \"replay crashed: \" + ($json.error.message || $json.error) : $json.error_id ? \"failed again (error \" + $json.error_id + \")\" : \"re-processed: \" + ($json.outcome || $json.action_outcome || \"ok\") + \" \" + ($json.application_code || \"\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7d7d16c6-edd9-5d5a-ac5a-fb9dddb9dfdd",
+      "name": "Replay Action Handler",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        920
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ ({\"WF-03\":\"ebKtDTWlruup0Nbg\",\"WF-04\":\"ntWf04Interview1\",\"WF-05\":\"ntWf05OfferMgmt1\",\"WF-06\":\"ntWf06Onboarding\",\"WF-08\":\"ntWf08Monitoring\"})[$(\"Begin Replay\").first().json.replay_workflow] }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $(\"Begin Replay\").first().json.payload.action }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "98eeec6a-70eb-532c-a315-3de6986352be",
+      "name": "Outcome: Action Handler",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2060,
+        920
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "337ca9c6-3995-5748-a0bd-4b72f9cac968",
+              "name": "replay_ok",
+              "value": "={{ !$json.error && !$json.error_id && [\"DONE\", \"SKIPPED\"].includes($json.action_outcome) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "7224bffa-8c5d-5891-aa28-e736d5f4b3cb",
+              "name": "detail",
+              "value": "={{ $json.error ? \"replay crashed: \" + ($json.error.message || $json.error) : ($json.action_outcome || \"no result\") + \": \" + ($json.action_reason || \"\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "345316f3-f1fa-58ab-aff7-79896fccaaee",
+      "name": "Outcome: Not Replayable",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1800,
+        1120
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "436ab717-7035-535c-a140-38a5c177cfee",
+              "name": "replay_ok",
+              "value": "false",
+              "type": "boolean"
+            },
+            {
+              "id": "a633ee5f-0c75-5dd3-afbb-d65b775cbb56",
+              "name": "detail",
+              "value": "={{ \"no replay handler for \" + $(\"Begin Replay\").first().json.replay_workflow }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9463ab20-a560-5607-a674-266c996cd1b9",
+      "name": "Outcome: Requeue Refused",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2060,
+        1120
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "63cbeaf4-aef6-52cb-aa95-46a33d7800be",
+              "name": "replay_ok",
+              "value": "false",
+              "type": "boolean"
+            },
+            {
+              "id": "f79f6d61-4ec2-5349-a4a7-3077c04e14ce",
+              "name": "detail",
+              "value": "={{ String($json.error?.message ?? $json.error ?? \"requeue refused\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7883449e-1ad1-58b5-ad10-d882472db3c2",
+      "name": "Resolve Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2320,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT api.resolve_error($1::uuid, $2, $3, $4::jsonb) AS status,\n       api.finish_workflow_execution($4::jsonb, CASE WHEN $2 = 'RESOLVED' THEN 'SUCCEEDED' ELSE 'FAILED' END) AS duration_ms",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Begin Replay\").first().json.error_id, $json.replay_ok ? \"RESOLVED\" : \"OPEN\", \"replay #\" + $(\"Begin Replay\").first().json.replay_count + \": \" + $json.detail, JSON.stringify({ ...$(\"Replay Request\").first().json.ctx, correlation_id: $(\"Begin Replay\").first().json.correlation_id }) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "037ed8e3-18e4-5ae8-aed3-e46a6f4ef1f8",
+      "name": "Respond Replay Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2580,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ error_id: $(\"Begin Replay\").first().json.error_id, status: $json.status, replay_count: $(\"Begin Replay\").first().json.replay_count, detail: [\"Outcome: Requeued\",\"Outcome: Intake\",\"Outcome: Candidate Processing\",\"Outcome: Action Handler\",\"Outcome: Not Replayable\",\"Outcome: Requeue Refused\"].map(n => $(n).isExecuted ? $(n).first().json.detail : null).find(Boolean) }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "17b53ea1-fb8d-5e12-a4b7-ad2869de51d4",
+      "name": "Respond Resolve Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2580,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ code: \"RESOLVE_FAILED\", detail: String($json.error?.message ?? $json.error ?? \"could not record the replay result\") }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      }
+    },
+    {
+      "id": "e71aeb4c-f680-5745-ac75-ab15f4bab207",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "parameters": {
+        "content": "## WF-07 Error & Recovery\n1. **Error Trigger**: the error workflow of every NovaTech workflow. A crash is recorded in the error queue (`api.record_error`, deduplicated by fingerprint) and its run is closed as FAILED.\n2. **Every 5 minutes**: `api.claim_unalerted_errors` → one digest email to `ops.alert_email` (each error alerted once).\n3. **POST /webhook/ops/replay** (header auth, called by the backend for staff): `api.begin_error_replay` → re-run the stored payload in the original workflow → `api.resolve_error` RESOLVED or OPEN. Replays reuse the original keys and ids, so they cannot create duplicates.",
+        "width": 620,
+        "height": 300,
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Describe Crash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe Crash": {
+      "main": [
+        [
+          {
+            "node": "Record Crash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Crash": {
+      "main": [
+        [
+          {
+            "node": "Close Crashed Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Alert Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Context": {
+      "main": [
+        [
+          {
+            "node": "Claim Unalerted Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Unalerted Errors": {
+      "main": [
+        [
+          {
+            "node": "Start Alert Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Alert Log": {
+      "main": [
+        [
+          {
+            "node": "Send Error Digest (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Digest (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Finish Alert Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Requested": {
+      "main": [
+        [
+          {
+            "node": "Replay Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Request": {
+      "main": [
+        [
+          {
+            "node": "Valid Error Id?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Error Id?": {
+      "main": [
+        [
+          {
+            "node": "Begin Replay",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Begin Replay": {
+      "main": [
+        [
+          {
+            "node": "Start Replay Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 409",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Replay Log": {
+      "main": [
+        [
+          {
+            "node": "Route by Replay Target",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Replay Target": {
+      "main": [
+        [
+          {
+            "node": "Requeue Scheduled Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resubmit to Intake",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replay Candidate Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replay Action Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replay Action Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replay Action Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replay Action Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replay Action Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Outcome: Not Replayable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requeue Scheduled Action": {
+      "main": [
+        [
+          {
+            "node": "Outcome: Requeued",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Outcome: Requeue Refused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resubmit to Intake": {
+      "main": [
+        [
+          {
+            "node": "Outcome: Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Candidate Processing": {
+      "main": [
+        [
+          {
+            "node": "Outcome: Candidate Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replay Action Handler": {
+      "main": [
+        [
+          {
+            "node": "Outcome: Action Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: Requeued": {
+      "main": [
+        [
+          {
+            "node": "Resolve Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: Intake": {
+      "main": [
+        [
+          {
+            "node": "Resolve Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: Candidate Processing": {
+      "main": [
+        [
+          {
+            "node": "Resolve Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: Action Handler": {
+      "main": [
+        [
+          {
+            "node": "Resolve Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: Not Replayable": {
+      "main": [
+        [
+          {
+            "node": "Resolve Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome: Requeue Refused": {
+      "main": [
+        [
+          {
+            "node": "Resolve Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Replay Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Resolve Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {
+    "node:Every 5 Minutes": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "6298531d-9fc6-4542-834a-c32fcb2b5fd6",
+  "activeVersionId": "6298531d-9fc6-4542-834a-c32fcb2b5fd6",
+  "versionCounter": 1,
+  "triggerCount": 2,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-10-01T21:02:46.801Z",
+      "createdAt": "2026-10-01T21:02:46.801Z",
+      "role": "workflow:owner",
+      "workflowId": "ntWf07ErrRecover",
+      "projectId": "9f7VzNAeKbzdM0tQ",
+      "project": {
+        "updatedAt": "2026-10-01T19:04:09.368Z",
+        "createdAt": "2026-09-29T01:01:06.760Z",
+        "id": "9f7VzNAeKbzdM0tQ",
+        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
