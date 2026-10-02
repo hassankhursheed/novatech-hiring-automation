@@ -9,9 +9,13 @@ flowchart TB
     SCH1((every 1 min)) --> WF00
     SCH2((daily 09:00)) --> WF08
     SCH3((hourly)) --> WF06
+    SCH4((every 5 min)) --> WF07
     ERR((any workflow fails)) --> WF07
+    BE[Backend: portal links + staff API] -->|POST /webhook/ops/kick| WF00
+    BE -->|POST /webhook/ops/replay| WF07
 
     WF01[WF-01 Application Intake] -->|Execute| WF02[WF-02 Candidate Processing]
+    WF01 -. kick .-> WF00
     WF02 -. enqueues SCREEN_APPLICATION .-> Q[(ops.scheduled_actions)]
     WF00[WF-00 Dispatcher] -->|claims| Q
     WF00 -->|SCREEN_APPLICATION| WF03[WF-03 Scoring & AI Review]
@@ -21,7 +25,7 @@ flowchart TB
     WF00 -->|rejection notice| WF02
     WF00 -->|review queue alerts| WF08[WF-08 Monitoring & Reporting]
     WF03 & WF04 & WF05 & WF06 -. status change enqueues next step .-> Q
-    WF07[WF-07 Error & Recovery] -->|replay| WF01 & WF03 & WF04 & WF05 & WF06
+    WF07[WF-07 Error & Recovery] -->|replay| WF00 & WF01 & WF02 & WF03 & WF04 & WF05 & WF06 & WF08
 
     subgraph Shared sub-workflows
         SWF01[SWF-01 Backend call<br/>retry + backoff]
@@ -93,17 +97,18 @@ flowchart TB
 | | |
 |---|---|
 | Responsibility | Deliver outbox events and fire due timers exactly where they belong |
-| Triggers | Schedule (every minute) and Execute Workflow ("kick" from other workflows for low latency) |
-| Steps | 1. `api.claim_scheduled_actions('n8n-wf00', 25, 300)`<br/>2. Switch on `action_type` → Execute the owning workflow with `{action}`<br/>3. `api.complete_scheduled_action(id, 'DONE'\|'SKIPPED'\|'FAILED', result, error, ctx)` |
-| Reliability | `SKIP LOCKED` makes overlapping runs safe. A failed action is retried with backoff (30 s, 1 m, 2 m, … up to 1 h). After `max_attempts` it goes to the error queue. Expired leases are re-claimed. |
+| Triggers | Schedule (every minute, the safety net); webhook `POST /webhook/ops/kick` (header auth; the backend calls it right after a person acts); Execute Workflow (WF-01 kicks it after intake) |
+| Steps | 1. `api.claim_scheduled_actions(worker, 25, 300)`<br/>2. **Route by Action Type**: a routing table (action type → owning workflow) sends each action to WF-02, WF-03, WF-04, WF-05, WF-06 or WF-08 with `{action}`<br/>3. `api.complete_scheduled_action(id, 'DONE'\|'SKIPPED'\|'FAILED', result, error, ctx)` |
+| Reliability | `SKIP LOCKED` makes overlapping runs safe. A failed action is retried with backoff (30 s, 1 m, 2 m, … up to 1 h). After `max_attempts` it goes to the error queue (`ACTION_ATTEMPTS_EXHAUSTED`, replayable). Expired leases are re-claimed. An unknown action type fails visibly ("no handler registered") instead of being dropped. |
 | Owns transitions | none (routing only) |
+| Source | `n8n/src/wf-00-dispatcher-scheduler.mjs` (`ROUTES` is the routing table) |
 
 ### WF-01 Application intake
 | | |
 |---|---|
 | Responsibility | Accept a submission durably, assign the correlation id, validate and normalise |
-| Triggers | Webhook `POST /webhook/applications` (header `Idempotency-Key` required); Execute Workflow (replay from WF-07) |
-| Steps | 1. ctx + `start_workflow_execution`<br/>2. Missing `Idempotency-Key` → 400<br/>3. `api.register_event('WEB_FORM', key, 'APPLICATION_SUBMITTED', body)`<br/>4. Replay of a completed event → respond 200 with the stored result and stop<br/>5. Respond **202** `{correlation_id}`<br/>6. SWF-01 `POST /v1/intake/validate`<br/>7. Execute WF-02 `{event_id, correlation_id, validation}` |
+| Triggers | Webhook `POST /webhook/applications` (header `Idempotency-Key` required). WF-07 replays failed intakes through the same webhook with the original key. |
+| Steps | 1. ctx + `start_workflow_execution`<br/>2. Missing `Idempotency-Key` → 400<br/>3. `api.register_event('WEB_FORM', key, 'APPLICATION_SUBMITTED', body)`<br/>4. Replay of a completed event → respond 200 with the stored result and stop<br/>5. Respond **202** `{correlation_id}`<br/>6. SWF-01 `POST /v1/intake/validate`<br/>7. Execute WF-02 `{event_id, correlation_id, validation}`<br/>8. Kick WF-00 (screening starts within seconds) |
 | Failure | Backend unavailable after retries → `api.fail_event` + SWF-03 with `replay_workflow = 'WF-01'` and payload `{source, idempotency_key, body}` |
 | Owns transitions | none (WF-02 persists) |
 
@@ -111,8 +116,8 @@ flowchart TB
 | | |
 |---|---|
 | Responsibility | Persist the candidate and application, detect duplicates, send candidate acknowledgements and rejection notices |
-| Triggers | Execute Workflow (from WF-01); WF-00 action `SEND_REJECTION_NOTICE` |
-| Steps | 1. `api.submit_application(event_id, validation, ctx)`<br/>2. Switch `outcome`:<br/>&nbsp;&nbsp;`ACCEPTED` / `NEEDS_REVIEW` → acknowledgement (SWF-02, key `ack:<event_id>`)<br/>&nbsp;&nbsp;`DUPLICATE` → "we already have your application" (key `dup:<event_id>`)<br/>&nbsp;&nbsp;`INVALID` → acknowledgement explaining what was missing, if a valid email exists<br/>3. Kick WF-00 |
+| Triggers | Execute Workflow (from WF-01, or WF-07 replay); WF-00 action `SEND_REJECTION_NOTICE` |
+| Steps | 1. `api.submit_application(event_id, validation, ctx)`<br/>2. Acknowledgement by outcome (SWF-02, key `candidate.ack:<event_id>`): received, duplicate ("we already have your application"), or invalid (what was missing), when a valid email exists<br/>3. Rejection notice (key `candidate.rejection:<application_id>`) after re-checking the application is still `REJECTED` |
 | Owns transitions | NEW → VALIDATING → VALIDATED / SCREENING_REVIEW |
 
 ### WF-03 Scoring & AI review
@@ -124,46 +129,71 @@ flowchart TB
 | Failure | `NO_ACTIVE_RULES` → `api.transition_application_status(VALIDATED → SCREENING_REVIEW, SYSTEM)` |
 | Owns transitions | VALIDATED → SCORED → SHORTLISTED / SCREENING_REVIEW / REJECTED |
 
-### WF-04 Interview management (build step 2)
-| | |
-|---|---|
-| Responsibility | Invitation, slot confirmation, calendar event, reminders, feedback collection, evaluation |
-| Triggers | WF-00 actions: `INVITE_TO_INTERVIEW`, `INTERVIEW_INVITE_REMINDER`, `INTERVIEW_INVITE_EXPIRY`, `FINALIZE_INTERVIEW_BOOKING`, `FEEDBACK_REMINDER`, `FEEDBACK_ESCALATION`, `EVALUATE_INTERVIEW` |
-| Steps (invite) | `api.create_interview_invitation` (idempotent per round; schedules reminder + expiry) → signed slot link from the backend → SWF-02 |
-| Steps (booking) | Candidate confirms in the portal → `api.confirm_interview_slot` (cancels reminders, schedules feedback timers) → WF-04 creates the Google Calendar event and sends the confirmation |
-| Steps (evaluation) | Feedback via the portal form → `api.submit_interview_feedback` → `EVALUATE_INTERVIEW` → backend combined score (30% application + 70% interview, configurable) → `api.apply_interview_decision` |
-| Owns transitions | SHORTLISTED → INTERVIEW_SCHEDULED → INTERVIEWED → SELECTED / REJECTED / INTERVIEW_REVIEW (+ expiry, cancel, no-show) |
+### Shape of WF-04, WF-05, WF-06 (dispatcher handlers)
+Each handler has one trigger (`action` from WF-00) and the same skeleton, generated by `n8n/src/lib.mjs`:
 
-### WF-05 Offer management (build step 2)
+```
+Build Context → Start Log & Load State (one query: execution log + snapshots + settings) → Route by Action Type
+   each branch:  re-check state ──no──→ Skip: No Longer Applies ─────────────────────┐
+                  │yes                                                              ├→ Finish & Return
+                  └→ api.* write / SWF-01 call → OK? → SWF-02 email(s) → Result ────┘   {action_outcome, action_reason}
+   failures:      SWF-01 error RETRYABLE → Result: Retry Later (FAILED → dispatcher backoff)
+                  anything else (DB rule violation, 4xx) → SWF-03 → Result: Moved to Error Queue (DONE, error_id)
+```
+
+The error-queue entry stores `{action}` and `replay_workflow`, so WF-07 can re-run the same branch. Every email has a
+deterministic dedupe key, so a retried or replayed branch never sends a message twice.
+
+### WF-04 Interview management
 | | |
 |---|---|
-| Responsibility | Offer draft, one or two approval levels, PDF generation, sending, reminders, response handling, expiry |
-| Triggers | WF-00 actions: `PREPARE_OFFER`, `REQUEST_OFFER_APPROVAL`, `SEND_OFFER`, `OFFER_REMINDER`, `OFFER_FINAL_REMINDER`, `OFFER_EXPIRY`, `NOTIFY_NEGOTIATION`, `NOTIFY_OFFER_CLOSED` |
-| Rules | Every offer needs L1 approval. Above `offer.second_approval_threshold` (PKR 250,000/month) it also needs L2 (different person). A rejection stops the send path and records the reason. The response (accept/decline/negotiate) cancels reminders. |
+| Responsibility | Invitation, slot booking follow-up, calendar event, reminders, feedback collection, evaluation |
+| Triggers | WF-00 actions `INVITE_TO_INTERVIEW`, `INTERVIEW_INVITE_REMINDER`, `INTERVIEW_INVITE_EXPIRY`, `FINALIZE_INTERVIEW_BOOKING`, `FEEDBACK_REMINDER`, `FEEDBACK_ESCALATION`, `EVALUATE_INTERVIEW` |
+| Invite | `api.create_interview_invitation` (idempotent per round; schedules reminder + expiry) → signed slot link (`POST /v1/links`, purpose `INTERVIEW_SLOT`, expires with the invitation) → email (`interview.invite:<interview_id>`) |
+| Reminder / expiry | Reminder only while the interview is still `INVITED`. Expiry: `api.expire_interview_invitation` → back to `SCREENING_REVIEW` (the recruiter is alerted by WF-08) |
+| Booking | The candidate picks a slot in the portal (`POST /v1/portal/interview/confirm` → `api.confirm_interview_slot`: books the slot, cancels the invitation timers, schedules the feedback timers). WF-04 then records the calendar event id, emails the candidate (time in company time zone, meeting link, add-to-calendar link) and sends the interviewer a scorecard link (purpose `INTERVIEW_FEEDBACK`) |
+| Feedback | Reminder to the interviewer, then escalation to HR, both only while feedback is missing. Submitting the scorecard (`POST /v1/portal/feedback` → `api.submit_interview_feedback`) cancels both |
+| Evaluation | SWF-01 `POST /v1/interviews/evaluate` (weighted final score; the interviewer's recommendation can only send a case to review) → `api.apply_interview_decision` |
+| Owns transitions | SHORTLISTED → INTERVIEW_SCHEDULED → INTERVIEWED → SELECTED / REJECTED / INTERVIEW_REVIEW; SHORTLISTED → SCREENING_REVIEW (expiry) |
+
+### WF-05 Offer management
+| | |
+|---|---|
+| Responsibility | Offer draft, one or two approval levels, PDF letter, sending, reminders, expiry, negotiation and closure |
+| Triggers | WF-00 actions `PREPARE_OFFER`, `REQUEST_OFFER_APPROVAL`, `SEND_OFFER`, `OFFER_REMINDER`, `OFFER_FINAL_REMINDER`, `OFFER_EXPIRY`, `NOTIFY_NEGOTIATION`, `NOTIFY_OFFER_CLOSED` |
+| Draft | `api.create_offer` (salary = expected salary clamped to the position band; two levels when above `offer.second_approval_threshold`). After an approver rejection the system never re-drafts on its own: HR is asked to revise |
+| Approval | A signed approval link (purpose `OFFER_APPROVAL`, 7 days) goes to the reporting manager if eligible at that level, otherwise to the first eligible approver; any eligible approver can still decide. The database enforces L1 before L2, a different person per level, never the creator, and a reason on rejection. No eligible approver → error queue (`NO_APPROVER_AVAILABLE`) |
+| Send | SWF-01 `POST /v1/offers/document` (deterministic PDF, stored by offer code and revision) → `api.mark_offer_sent` (schedules reminders and expiry) → signed response link (purpose `OFFER_RESPONSE`, expires with the offer) → email |
+| Response | Candidate accepts / declines / asks to negotiate in the portal (`api.respond_to_offer`, cancels the reminders). Negotiation notifies HR and the manager and acknowledges the candidate; a decline or expiry notifies both sides |
 | Owns transitions | SELECTED → OFFER_PENDING_APPROVAL → OFFERED → ACCEPTED / DECLINED / NEGOTIATION / OFFER_EXPIRED |
 
-### WF-06 Employee onboarding (reusable sub-workflow, build step 3)
+### WF-06 Employee onboarding
 | | |
 |---|---|
 | Responsibility | Create the employee exactly once; tasks, account (simulated), welcome, orientation, overdue tracking |
-| Triggers | WF-00 action `START_ONBOARDING` (callable standalone); hourly schedule for overdue tasks |
-| Steps | `api.create_employee_from_offer` (idempotent per offer, generates `NT-YYYY-NNN`, creates tasks from templates) → simulated account → welcome email → Calendar orientation → notify HR/manager. The hourly run selects overdue tasks not reminded within `onboarding.overdue_reminder_every` → reminders. |
-| Owns transitions | ACCEPTED → ONBOARDING → ONBOARDED |
+| Triggers | WF-00 actions `START_ONBOARDING`, `NOTIFY_ONBOARDING_COMPLETE`; schedule every hour (minute 15) |
+| Start | `api.create_employee_from_offer` (one employee per offer: `NT-YYYY-NNN`, company email, tasks from templates with owners and due dates) → simulated account provisioning (`api.mark_account_provisioned`; replace with Google Workspace / Entra ID) → welcome email with orientation and add-to-calendar link → notice to HR, the manager and IT with the task list |
+| Overdue sweep | `api.claim_overdue_onboarding_tasks` claims each overdue task at most once per `onboarding.overdue_reminder_every` → one reminder to its owner (HR as fallback). Nothing to do → no execution log entry |
+| Completion | The last task done moves the application to `ONBOARDED`; WF-06 tells HR and the manager |
+| Owns transitions | ACCEPTED → ONBOARDING (→ ONBOARDED via `api.complete_onboarding_task`) |
 
 ### WF-07 Error & recovery
 | | |
 |---|---|
 | Responsibility | Safety net, alerting, operator replay |
-| Triggers | Error Trigger (all workflows); webhook `POST /webhook/ops/replay` (header auth, called by the HR portal); schedule (every 5 min, unalerted errors) |
-| Steps (replay) | `api.begin_error_replay(error_id)` → Execute `replay_workflow` with the stored payload → `api.resolve_error('RESOLVED' \| 'OPEN')` |
-| Why replay is safe | Replays reuse the original idempotency key / entity ids, so every `api.*` call on the path is idempotent |
+| Triggers | Error Trigger (it is the error workflow of every other workflow); schedule every 5 minutes; webhook `POST /webhook/ops/replay` (header auth; the backend calls it for `POST /v1/staff/errors/{id}/replay`) |
+| Crash | `api.record_error` (class `UNKNOWN`, code `WORKFLOW_CRASHED`, deduplicated by fingerprint) and the crashed run is closed as FAILED in the execution log |
+| Digest | `api.claim_unalerted_errors` → one email to `ops.alert_email` listing every new error (each error is alerted once) |
+| Replay | `api.begin_error_replay(error_id)` (OPEN → REPLAYING, records who replayed) → by `replay_workflow`: WF-00 requeues the scheduled action; WF-01 re-submits through the intake webhook with the original idempotency key; WF-02 re-persists the stored validation; WF-03 / 04 / 05 / 06 / 08 re-run the stored `{action}` → `api.resolve_error(RESOLVED \| OPEN)` → HTTP 200 with the outcome (409 if the error is not replayable) |
+| Why replay is safe | Replays reuse the original idempotency key and entity ids, and every handler re-checks state first, so no `api.*` call on the path can create a duplicate |
 
 ### WF-08 Monitoring & reporting
 | | |
 |---|---|
-| Responsibility | Daily management report, review-queue alerts, operational health |
-| Triggers | Schedule daily 09:00 (company time zone); WF-00 action `NOTIFY_REVIEW_QUEUE` |
-| Steps (report) | `reporting.daily_metrics(yesterday)` → optional AI summary (numbers are passed in; any number not in the input rejects the summary) → `api.save_daily_report` (one per date) → email/Telegram → `api.mark_daily_report_delivered` |
+| Responsibility | Daily management report, review-queue alerts |
+| Triggers | Schedule daily 09:00 (workflow time zone Asia/Karachi); webhook `POST /webhook/ops/daily-report` (header auth; body `{"report_date": "YYYY-MM-DD", "force": false}`); WF-00 action `NOTIFY_REVIEW_QUEUE` |
+| Report | `reporting.daily_metrics(date)` (default yesterday) → SWF-01 `POST /v1/reports/daily-summary` (template text, or AI prose that is rejected if it contains any number not in the metrics) → `api.save_daily_report` (one per date) → email to HR admins and L2 approvers (`report.daily:<date>`) → `api.mark_daily_report_delivered`. Already delivered → SKIPPED unless `force` |
+| Review alerts | Re-checks the application is still in `SCREENING_REVIEW` / `INTERVIEW_REVIEW` → email to the recruiters, or to the position's hiring manager for interview reviews, with the reason and the scores |
 | Rule | Every number comes from SQL. AI only writes prose. |
 
 ## Brief scenario coverage

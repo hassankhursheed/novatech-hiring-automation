@@ -18,6 +18,10 @@ Two consequences:
   rows in `ops.scheduled_actions`, picked up by a dispatcher (durable timers).
 * **Backend compute endpoints never write.** n8n calls them, then persists the result through `api.*`
   database functions. This keeps the orchestration visible in n8n, and it makes the endpoints safe to retry.
+* **People act through the backend, never through n8n.** A candidate's slot choice, an interviewer's scorecard or an
+  approver's decision is one `api.*` call with that person as the actor (`/v1/portal/*` with a signed link, or
+  `/v1/staff/*`). The database checks ownership, roles and state; the backend then kicks the dispatcher so n8n
+  continues the process within seconds.
 
 ## 2. System context
 
@@ -47,11 +51,11 @@ flowchart LR
     end
 
     subgraph API["FastAPI backend"]
-        V[/validate/]
-        S[/score/]
-        AI[/ai-analysis/]
-        D[/decide/]
+        V[/validate, score, ai-analysis, decide/]
+        EV[/interviews/evaluate, offers/document,<br/>reports/daily-summary, links/]
         CV[/public/cv/]
+        PO[/portal/* signed links/]
+        ST[/staff/* actions + queues/]
     end
 
     subgraph DB["PostgreSQL 17 - source of truth"]
@@ -176,7 +180,13 @@ n8n for many paying companies as your own SaaS needs a commercial agreement with
   * `novatech_owner` owns the objects and is used only by migrations.
   * `n8n_app` and `backend_app` can `SELECT` and `EXECUTE api.*`, and nothing else.
 * Every `api.*` function is `SECURITY DEFINER` with a pinned `search_path`. Audit tables are append-only (trigger).
-* Service-to-service calls (n8n to the backend) use rotatable `X-API-Key` keys, compared in constant time.
+* Service-to-service calls (n8n to the backend, and the backend to n8n's `ops/*` webhooks) use rotatable
+  `X-API-Key` keys, compared in constant time.
+* Candidates, interviewers and approvers act through **signed, expiring links** (HS256 JWT, `LINK_SIGNING_SECRET`):
+  each token names one person, one entity and one purpose, expires with the business deadline, and travels in the
+  URL fragment so it never reaches server logs. The database still checks ownership and state on every action.
+* Staff endpoints currently identify the staff member with `X-Staff-Id` behind the service key (for internal tools
+  and the portal's server side). The React portal will replace this with company SSO (OIDC).
 * Secrets live only in `.env` / n8n credentials. The backend container receives only the variables it needs.
 * All ports are bound to `127.0.0.1`. CV uploads are type-checked by magic bytes and size-limited, with a
   zip-bomb guard.
