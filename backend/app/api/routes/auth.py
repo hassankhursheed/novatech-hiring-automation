@@ -148,8 +148,14 @@ async def sign_in_options(
 ) -> dict[str, Any]:
     if not settings.demo_password:
         return {"email_link": True, "password": False}
-    # Demo installations list their test accounts so testers can pick a role; production never does.
-    return {"email_link": True, "password": True, "demo_accounts": await directory.active_staff()}
+    # Demo installations offer a ready-made HR login (the first active HR admin) so testers can sign in in one click.
+    # Production never reaches this branch: STAFF_DEMO_PASSWORD is refused when APP_ENV=production.
+    staff = await directory.active_staff()
+    hr = next((s for s in staff if "HR_ADMIN" in s["roles"]), staff[0] if staff else None)
+    demo_login = (
+        {"email": hr["email"], "password": settings.demo_password, "full_name": hr["full_name"]} if hr else None
+    )
+    return {"email_link": True, "password": True, "demo_login": demo_login}
 
 
 @router.post("/password-login", summary="Demo sign-in with the shared STAFF_DEMO_PASSWORD (disabled in production)")

@@ -29,6 +29,7 @@ function NotFound() {
 // Browser tab title per page: candidates see "Careers", staff see where they are in the portal.
 const TITLES: [RegExp, string][] = [
   [/^\/careers/, 'Careers'],
+  [/^\/hr/, 'HR portal'],
   [/^\/candidate\/interview/, 'Your interview'],
   [/^\/candidate\/offer/, 'Your offer'],
   [/^\/staff\/feedback/, 'Interview scorecard'],
@@ -46,7 +47,7 @@ function PageTitle() {
   const { pathname } = useLocation()
   useEffect(() => {
     const page = TITLES.find(([pattern]) => pattern.test(pathname))?.[1] ?? 'Page not found'
-    const section = pathname.startsWith('/staff') ? `${BRAND} Hiring` : COMPANY
+    const section = /^\/(staff|hr)/.test(pathname) ? `${BRAND} Hiring` : COMPANY
     document.title = `${page} · ${section}`
   }, [pathname])
   return null
