@@ -116,7 +116,7 @@ export default function Login() {
 
       {passwordMode && demo && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600">
-          <span>Demo HR login: <span className="font-medium text-slate-900">{demo.email}</span></span>
+          <span>Demo HR / recruiter login: <span className="font-medium text-slate-900">{demo.email}</span></span>
           <Button variant="secondary" onClick={() => { setEmail(demo.email); setPassword(demo.password) }}>Use demo login</Button>
         </div>
       )}
