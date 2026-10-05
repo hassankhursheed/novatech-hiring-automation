@@ -214,6 +214,7 @@ async def test_portal_read_models_and_single_use_links(db: TransactionDatabase, 
     staff = await directory.by_email("SANA.MALIK@novatech.example")
     assert staff is not None and staff["staff_id"] == SANA_HR
     assert (await directory.profile(SANA_HR) or {}).get("full_name") == "Sana Malik"
+    assert any(s["email"] == "sana.malik@novatech.example" for s in await directory.active_staff())
     token_id = uuid.uuid4().hex
     ctx = {"actor_type": "STAFF", "actor_id": SANA_HR, "workflow_name": "PORTAL"}
     assert await directory.consume_link(token_id, "STAFF_LOGIN", SANA_HR, "2099-01-01T00:00:00Z", ctx)

@@ -1,13 +1,14 @@
 # NovaTech portal (React + TypeScript)
 
-One single-page app for everyone who is not an automation:
+One single-page app with two separate faces: the **careers site** (`/careers`, the default page) for job seekers and
+candidates, and the **HR portal** (`/hr`) for staff. Neither links to the other.
 
 | Who | Pages | How they get in |
 |---|---|---|
 | Applicants | `/careers`: open positions and the application form (CV upload, then intake with an `Idempotency-Key`) | public |
 | Candidates | `/candidate/interview` (pick or cancel a slot), `/candidate/offer` (terms, PDF, accept / decline / negotiate) | signed link from their email |
 | Interviewers, approvers | `/staff/feedback` (scorecard), `/staff/approval` (approve or reject one level) | signed link from their email |
-| HR and managers | `/staff` dashboard and work queues, applications with full history and actions, onboarding board, automation error queue with replay | passwordless email sign-in (`/staff/login`) |
+| HR and managers | `/hr` (= `/staff`): dashboard and work queues, applications with full history and actions, onboarding board, automation error queue with replay | email sign-in link, or email + demo password when `STAFF_DEMO_PASSWORD` is set (demo installations only) |
 
 Link tokens arrive in the URL fragment (`#token=…`), are moved to `sessionStorage` and removed from the address bar
 on load, and are sent to the API as `Authorization: Bearer`. The staff session (8 hours) is per browser tab.

@@ -1,10 +1,11 @@
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes import auth
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.links import LinkPurpose, LinkSigner
 from tests.conftest import API_KEY, HR_ID, FakeN8n
 
@@ -41,13 +42,25 @@ class FakeDirectory:
     async def onboarding_board(self) -> list[dict[str, Any]]:
         return []
 
+    async def active_staff(self) -> list[dict[str, Any]]:
+        return [{k: STAFF[k] for k in ("full_name", "email", "roles", "job_title")}]
+
 
 @pytest.fixture(autouse=True)
 def directory(client: TestClient) -> FakeDirectory:
     fake = FakeDirectory()
     client.app.state.staff_directory = fake  # type: ignore[attr-defined]
     auth._LAST_LINK.clear()
+    auth._FAILURES.clear()
     return fake
+
+
+@pytest.fixture
+def demo_password(client: TestClient) -> Iterator[str]:
+    settings = Settings(staff_demo_password="Demo-pass-2026")
+    client.app.dependency_overrides[get_settings] = lambda: settings  # type: ignore[attr-defined]
+    yield "Demo-pass-2026"
+    client.app.dependency_overrides.clear()  # type: ignore[attr-defined]
 
 
 def login_token() -> str:
@@ -98,3 +111,43 @@ def test_other_tokens_cannot_be_used_as_a_session(client: TestClient) -> None:
 def test_internal_tools_still_use_the_service_key(client: TestClient) -> None:
     response = client.get("/v1/staff/me", headers={"X-API-Key": API_KEY, "X-Staff-Id": HR_ID})
     assert response.status_code == 200 and response.json()["staff_id"] == HR_ID
+
+
+# ---- demo password sign-in -----------------------------------------------------------------------------------
+def test_password_sign_in_is_off_unless_configured(client: TestClient) -> None:
+    assert client.get("/v1/auth/staff/options").json() == {"email_link": True, "password": False}
+    off = client.post("/v1/auth/staff/password-login", json={"email": STAFF["email"], "password": "anything"})
+    assert off.status_code == 404 and off.json()["code"] == "PASSWORD_LOGIN_DISABLED"
+
+
+def test_demo_password_signs_in_any_active_staff_member(client: TestClient, demo_password: str) -> None:
+    options = client.get("/v1/auth/staff/options").json()
+    assert options["password"] is True and options["demo_accounts"][0]["email"] == STAFF["email"]
+    ok = client.post(
+        "/v1/auth/staff/password-login", json={"email": "SANA.MALIK@novatech.example", "password": demo_password}
+    )
+    assert ok.status_code == 200 and ok.json()["staff"]["full_name"] == "Sana Malik"
+    session = {"Authorization": f"Bearer {ok.json()['token']}"}
+    assert client.get("/v1/staff/me", headers=session).json()["staff_id"] == HR_ID
+
+
+def test_wrong_password_and_unknown_email_get_the_same_answer_then_throttle(
+    client: TestClient, demo_password: str
+) -> None:
+    wrong = client.post("/v1/auth/staff/password-login", json={"email": STAFF["email"], "password": "nope"})
+    unknown = client.post(
+        "/v1/auth/staff/password-login", json={"email": "x@novatech.example", "password": demo_password}
+    )
+    assert wrong.status_code == unknown.status_code == 401
+    assert wrong.json()["code"] == unknown.json()["code"] == "INVALID_CREDENTIALS"
+    for _ in range(4):
+        client.post("/v1/auth/staff/password-login", json={"email": STAFF["email"], "password": "nope"})
+    locked = client.post("/v1/auth/staff/password-login", json={"email": STAFF["email"], "password": demo_password})
+    assert locked.status_code == 429 and locked.json()["code"] == "TOO_MANY_ATTEMPTS"
+
+
+def test_demo_password_is_refused_in_production() -> None:
+    with pytest.raises(ValueError, match="STAFF_DEMO_PASSWORD"):
+        Settings(
+            app_env="production", internal_api_keys="k" * 30, link_signing_secret="s" * 40, staff_demo_password="x"
+        )
