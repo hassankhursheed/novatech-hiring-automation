@@ -122,7 +122,8 @@ def test_password_sign_in_is_off_unless_configured(client: TestClient) -> None:
 
 def test_demo_password_signs_in_any_active_staff_member(client: TestClient, demo_password: str) -> None:
     options = client.get("/v1/auth/staff/options").json()
-    assert options["password"] is True and options["demo_accounts"][0]["email"] == STAFF["email"]
+    assert options["password"] is True and options["demo_login"]["email"] == STAFF["email"]  # the HR admin
+    assert options["demo_login"]["password"] == demo_password
     ok = client.post(
         "/v1/auth/staff/password-login", json={"email": "SANA.MALIK@novatech.example", "password": demo_password}
     )
