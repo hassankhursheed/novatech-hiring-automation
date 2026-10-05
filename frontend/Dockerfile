@@ -9,7 +9,9 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY . .
 ARG VITE_API_URL=http://localhost:8000
 ARG VITE_INTAKE_URL=http://localhost:5678/webhook/applications
-ENV VITE_API_URL=$VITE_API_URL VITE_INTAKE_URL=$VITE_INTAKE_URL
+# Development only: shows "emails go to Mailpit" hints. Build production images without it.
+ARG VITE_DEV_MAILBOX_URL=
+ENV VITE_API_URL=$VITE_API_URL VITE_INTAKE_URL=$VITE_INTAKE_URL VITE_DEV_MAILBOX_URL=$VITE_DEV_MAILBOX_URL
 RUN npm run build
 
 # ---------------------------------------------------------------------------------------------

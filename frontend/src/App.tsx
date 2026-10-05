@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { Link, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import { PublicLayout, StaffLayout } from './components/layout'
 import { Loading } from './components/ui'
 import { COMPANY } from './lib/config'
@@ -41,9 +41,37 @@ function NotFound() {
   )
 }
 
+// Browser tab title per page: candidates see "Careers", staff see where they are in the portal.
+const TITLES: [RegExp, string][] = [
+  [/^\/$/, 'Home'],
+  [/^\/careers/, 'Careers'],
+  [/^\/candidate\/interview/, 'Your interview'],
+  [/^\/candidate\/offer/, 'Your offer'],
+  [/^\/staff\/feedback/, 'Interview scorecard'],
+  [/^\/staff\/approval/, 'Offer approval'],
+  [/^\/staff\/login/, 'Staff sign-in'],
+  [/^\/staff\/applications\/[^/]+/, 'Application'],
+  [/^\/staff\/applications/, 'Applications'],
+  [/^\/staff\/onboarding/, 'Onboarding'],
+  [/^\/staff\/errors/, 'Automation errors'],
+  [/^\/staff\/?$/, 'Dashboard'],
+]
+const BRAND = COMPANY.split(' ')[0]
+
+function PageTitle() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    const page = TITLES.find(([pattern]) => pattern.test(pathname))?.[1] ?? 'Page not found'
+    const section = pathname.startsWith('/staff') ? `${BRAND} Hiring` : COMPANY
+    document.title = `${page} · ${section}`
+  }, [pathname])
+  return null
+}
+
 export default function App() {
   return (
     <Suspense fallback={<Loading />}>
+      <PageTitle />
       <Routes>
         <Route element={<PublicLayout />}>
           <Route index element={<Home />} />

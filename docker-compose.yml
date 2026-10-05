@@ -143,6 +143,7 @@ services:
       args:
         VITE_API_URL: ${PORTAL_API_URL:-http://localhost:8000}
         VITE_INTAKE_URL: ${PORTAL_INTAKE_URL:-http://localhost:5678/webhook/applications}
+        VITE_DEV_MAILBOX_URL: ${PORTAL_DEV_MAILBOX_URL-http://localhost:8025}  # set empty for production
     image: novatech/portal:${APP_VERSION:-0.1.0}
     <<: [*restart, *logging]
     environment:

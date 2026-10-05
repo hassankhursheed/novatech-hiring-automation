@@ -4,6 +4,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Narrow } from '../../components/layout'
 import { Alert, Button, Card, Field, Input, Loading } from '../../components/ui'
 import { api, explain } from '../../lib/api'
+import { DEV_MAILBOX_URL } from '../../lib/config'
 import { readLinkToken, saveSession, useStaffSession, type StaffProfile } from '../../lib/session'
 
 interface Session { token: string; expires_at: string; staff: StaffProfile }
@@ -62,7 +63,17 @@ export default function Login() {
       {exchange.error && <Alert tone="error">{explain(exchange.error)}</Alert>}
       <Card>
         {requestLink.isSuccess ? (
-          <Alert tone="success" title="Check your inbox">{requestLink.data.status} The link works once and expires in 15 minutes.</Alert>
+          <div className="space-y-4">
+            <Alert tone="success" title="Check your inbox">{requestLink.data.status} The link works once and expires in 15 minutes.</Alert>
+            {DEV_MAILBOX_URL && (
+              <Alert tone="info" title="Development mode">
+                Emails are not delivered to real inboxes here. Open the test inbox at{' '}
+                <a className="font-medium underline" href={DEV_MAILBOX_URL} target="_blank" rel="noreferrer">{DEV_MAILBOX_URL}</a>{' '}
+                and click the link in the newest “Your sign-in link” email. Only staff accounts receive one.
+              </Alert>
+            )}
+            <Button variant="ghost" onClick={() => requestLink.reset()}>Use another email</Button>
+          </div>
         ) : (
           <form onSubmit={submit} className="space-y-4">
             <Field label="Work email" required>
