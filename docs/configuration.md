@@ -35,7 +35,9 @@ Configuration is split by who changes it and how often:
 | `FAULT_INJECTION_ENABLED` | backend | honour `X-Fault-Inject` (dev/test only) |
 | `LINK_SIGNING_SECRET` | backend | signs the links in emails (slot choice, offer response, scorecard, approval); required in production, at least 32 characters. Rotating it invalidates links already sent |
 | `LINK_MAX_TTL_DAYS` | backend | upper bound for any link's validity (default 30); links normally expire at the business deadline |
+| `STAFF_DEMO_PASSWORD` | backend | demo/testing only: every active staff account can also sign in to the HR portal with this shared password (5 failures lock an address for 10 minutes). Empty = disabled; refused when `APP_ENV=production` |
 | `STAFF_LOGIN_LINK_MINUTES`, `STAFF_SESSION_HOURS` | backend | staff sign-in link lifetime (default 15, single use) and portal session length (default 8) |
+| `PORTAL_DEV_MAILBOX_URL` | portal | development hint "emails go to Mailpit" on the sign-in page; set it empty for production builds |
 | `PORTAL_PORT`, `PORTAL_API_URL`, `PORTAL_INTAKE_URL`, `PORTAL_CONNECT_SRC` | portal | published port; API and intake URLs baked into the bundle; origins allowed by the portal's Content-Security-Policy |
 | `LLM_PROVIDER`, `LLM_MODEL` | backend | `anthropic` / `openai` / `mistral` / `google` / `none`; model id (default `claude-opus-5`) |
 | `LLM_TIMEOUT_SECONDS`, `LLM_MAX_TOKENS` | backend | AI call limits |

@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     link_max_ttl_days: int = Field(default=30, ge=1, le=90)
     staff_login_link_minutes: int = Field(default=15, ge=5, le=60)
     staff_session_hours: int = Field(default=8, ge=1, le=24)
+    # Development/demo only: every active staff account can also sign in with this shared password.
+    # Empty = disabled (the default). Refused when APP_ENV=production.
+    staff_demo_password: SecretStr | None = None
 
     # n8n webhooks the backend calls (dispatcher kick, error replay). Empty disables the calls.
     n8n_base_url: str = "http://n8n:5678"
@@ -76,6 +79,10 @@ class Settings(BaseSettings):
                 raise ValueError("INTERNAL_API_KEYS must be set in production")
             if any(len(k.get_secret_value()) < 24 for k in self.internal_api_keys):
                 raise ValueError("INTERNAL_API_KEYS must be at least 24 characters in production")
+            if self.staff_demo_password and self.staff_demo_password.get_secret_value():
+                raise ValueError(
+                    "STAFF_DEMO_PASSWORD is for demos only; unset it in production (staff use email sign-in)"
+                )
             if not self.link_signing_secret or len(self.link_signing_secret.get_secret_value()) < 32:
                 raise ValueError("LINK_SIGNING_SECRET must be set (at least 32 characters) in production")
         return self
@@ -87,6 +94,11 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def demo_password(self) -> str | None:
+        value = self.staff_demo_password.get_secret_value() if self.staff_demo_password else ""
+        return value or None
 
     @property
     def n8n_webhook_key(self) -> str | None:

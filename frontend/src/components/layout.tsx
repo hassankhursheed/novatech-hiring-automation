@@ -4,24 +4,26 @@ import { COMPANY } from '../lib/config'
 import { saveSession, useStaffSession } from '../lib/session'
 import { cx } from './ui'
 
-function Logo({ to = '/' }: { to?: string }) {
+function Logo({ to, label }: { to: string; label?: string }) {
   return (
     <Link to={to} className="flex items-center gap-2 font-semibold text-slate-900">
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">N</span>
       <span>{COMPANY}</span>
+      {label && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{label}</span>}
     </Link>
   )
 }
 
-export function PublicLayout() {
+/** Job seekers and candidates: the company's careers site. No link into the HR portal. */
+export function CareersLayout() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
-          <Logo />
+          <Logo to="/careers" label="Careers" />
           <nav className="flex items-center gap-5 text-sm text-slate-600">
-            <Link to="/careers" className="hover:text-slate-900">Careers</Link>
-            <Link to="/staff" className="hover:text-slate-900">Staff portal</Link>
+            <Link to="/careers" className="hover:text-slate-900">Open positions</Link>
+            <Link to="/careers#apply" className="rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white hover:bg-brand-700">Apply now</Link>
           </nav>
         </div>
       </header>
@@ -31,6 +33,23 @@ export function PublicLayout() {
       <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
         © {new Date().getFullYear()} {COMPANY}. Your data is used only for this recruitment process.
       </footer>
+    </div>
+  )
+}
+
+/** HR pages reached before signing in: sign-in, and the scorecard / approval pages opened from staff emails. */
+export function HrAccessLayout() {
+  return (
+    <div className="flex min-h-screen flex-col bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
+          <Logo to="/staff" label="HR portal" />
+          <span className="text-xs text-slate-500">For {COMPANY} staff only</span>
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
+        <Outlet />
+      </main>
     </div>
   )
 }
@@ -62,7 +81,7 @@ export function StaffLayout() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4">
           <div className="flex items-center gap-8">
-            <Logo to="/staff" />
+            <Logo to="/staff" label="HR portal" />
             <nav className="hidden gap-1 md:flex">
               {nav.map((item) => (
                 <NavLink

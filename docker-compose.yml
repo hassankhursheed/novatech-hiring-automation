@@ -104,6 +104,7 @@ services:
       FAULT_INJECTION_ENABLED: ${FAULT_INJECTION_ENABLED:-false}
       LINK_SIGNING_SECRET: ${LINK_SIGNING_SECRET:?set LINK_SIGNING_SECRET in .env}
       LINK_MAX_TTL_DAYS: ${LINK_MAX_TTL_DAYS:-30}
+      STAFF_DEMO_PASSWORD: ${STAFF_DEMO_PASSWORD:-}
       # Dispatcher kick + error replay webhooks (internal network; authenticated with the internal API key)
       N8N_BASE_URL: http://n8n:5678
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}

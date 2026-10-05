@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Link, Route, Routes, useLocation } from 'react-router-dom'
-import { PublicLayout, StaffLayout } from './components/layout'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { CareersLayout, HrAccessLayout, StaffLayout } from './components/layout'
 import { Loading } from './components/ui'
 import { COMPANY } from './lib/config'
 
@@ -16,40 +16,24 @@ const ApplicationDetail = lazy(() => import('./pages/staff/ApplicationDetail'))
 const OnboardingBoard = lazy(() => import('./pages/staff/Operations').then((m) => ({ default: m.OnboardingBoard })))
 const ErrorQueue = lazy(() => import('./pages/staff/Operations').then((m) => ({ default: m.ErrorQueue })))
 
-function Home() {
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <Link to="/careers" className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm hover:border-brand-500">
-        <h2 className="text-xl font-semibold text-slate-900">Careers at {COMPANY}</h2>
-        <p className="mt-2 text-sm text-slate-600">See open positions and apply in a few minutes.</p>
-      </Link>
-      <Link to="/staff" className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm hover:border-brand-500">
-        <h2 className="text-xl font-semibold text-slate-900">Staff portal</h2>
-        <p className="mt-2 text-sm text-slate-600">Reviews, approvals, onboarding and automation health.</p>
-      </Link>
-    </div>
-  )
-}
-
 function NotFound() {
   return (
     <div className="py-20 text-center">
       <h1 className="text-2xl font-semibold text-slate-900">Page not found</h1>
       <p className="mt-2 text-sm text-slate-600">If you followed a link from an email, please use the latest one we sent you.</p>
-      <Link to="/" className="mt-6 inline-block text-sm font-medium text-brand-700 hover:underline">Go to the start page</Link>
+      <Link to="/careers" className="mt-6 inline-block text-sm font-medium text-brand-700 hover:underline">See open positions</Link>
     </div>
   )
 }
 
 // Browser tab title per page: candidates see "Careers", staff see where they are in the portal.
 const TITLES: [RegExp, string][] = [
-  [/^\/$/, 'Home'],
   [/^\/careers/, 'Careers'],
   [/^\/candidate\/interview/, 'Your interview'],
   [/^\/candidate\/offer/, 'Your offer'],
   [/^\/staff\/feedback/, 'Interview scorecard'],
   [/^\/staff\/approval/, 'Offer approval'],
-  [/^\/staff\/login/, 'Staff sign-in'],
+  [/^\/staff\/login/, 'HR portal sign-in'],
   [/^\/staff\/applications\/[^/]+/, 'Application'],
   [/^\/staff\/applications/, 'Applications'],
   [/^\/staff\/onboarding/, 'Onboarding'],
@@ -73,15 +57,20 @@ export default function App() {
     <Suspense fallback={<Loading />}>
       <PageTitle />
       <Routes>
-        <Route element={<PublicLayout />}>
-          <Route index element={<Home />} />
+        {/* Job seekers and candidates: the careers site */}
+        <Route index element={<Navigate to="/careers" replace />} />
+        <Route element={<CareersLayout />}>
           <Route path="careers" element={<Careers />} />
           <Route path="candidate/interview" element={<Interview />} />
           <Route path="candidate/offer" element={<Offer />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+        {/* HR / recruiters / managers: the HR portal */}
+        <Route path="hr" element={<Navigate to="/staff" replace />} />
+        <Route element={<HrAccessLayout />}>
+          <Route path="staff/login" element={<Login />} />
           <Route path="staff/feedback" element={<Feedback />} />
           <Route path="staff/approval" element={<Approval />} />
-          <Route path="staff/login" element={<Login />} />
-          <Route path="*" element={<NotFound />} />
         </Route>
         <Route path="staff" element={<StaffLayout />}>
           <Route index element={<Dashboard />} />

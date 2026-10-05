@@ -137,7 +137,7 @@ function ApplicationForm({ formRef, positions, selected, onSelect }: {
 
   return (
     <Card title="Apply">
-      <form ref={formRef} onSubmit={submit} className="grid gap-5 md:grid-cols-2" noValidate={false}>
+      <form id="apply" ref={formRef} onSubmit={submit} className="grid scroll-mt-24 gap-5 md:grid-cols-2" noValidate={false}>
         <Field label="Position" required>
           <Select name="position" required value={selected} onChange={(e) => onSelect(e.target.value)}>
             <option value="" disabled>Choose a position</option>

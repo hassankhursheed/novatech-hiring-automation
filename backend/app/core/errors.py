@@ -95,6 +95,12 @@ class UnprocessableError(AppError):
     title = "Business rule violation"
 
 
+class TooManyRequestsError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "TOO_MANY_ATTEMPTS"
+    title = "Too many attempts"
+
+
 class PayloadTooLargeError(AppError):
     status_code = status.HTTP_413_CONTENT_TOO_LARGE
     code = "PAYLOAD_TOO_LARGE"

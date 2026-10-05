@@ -221,6 +221,14 @@ class StaffDirectory:
             (staff_id,),
         )
 
+    async def active_staff(self) -> list[dict[str, Any]]:
+        rows = await self._db.fetch_all(
+            """SELECT full_name, email, roles, job_title FROM hiring.staff_members
+                WHERE is_active ORDER BY array_position(ARRAY['HR_ADMIN', 'RECRUITER', 'APPROVER_L2', 'HIRING_MANAGER',
+                      'INTERVIEWER', 'IT_ADMIN'], roles[1]), full_name"""
+        )
+        return [dict(r) for r in rows]
+
     async def consume_link(self, token_id: str, purpose: str, subject_id: str, expires_at: Any, ctx: Ctx) -> bool:
         row = await self._db.fetch_one(
             "SELECT api.consume_link_token(%s, %s, %s, %s, %s) AS ok",

@@ -45,7 +45,8 @@ Linux/macOS: `sh scripts/new-env.sh` then the same `docker compose` commands.
 | n8n editor | http://localhost:5678 | create the owner account on first visit, see [docs/n8n-setup.md](docs/n8n-setup.md) |
 | Backend API docs | http://localhost:8000/docs | Swagger UI (development only) |
 | Backend health | http://localhost:8000/health/ready | `database: true` when ready |
-| Portal | http://localhost:5173 | careers form, candidate/staff link pages, HR portal (sign in with a seeded staff email, e.g. `sana.malik@novatech.example`; the link arrives in Mailpit) |
+| Careers site (job seekers) | http://localhost:5173/careers | open positions and the application form; candidates' interview and offer pages |
+| HR portal (staff) | http://localhost:5173/hr | sign in with a staff email and the demo password from `STAFF_DEMO_PASSWORD` in `.env` (or an emailed one-time link, which arrives in Mailpit) |
 | Mailpit (dev inbox) | http://localhost:8025 | every email sent in development lands here |
 | Business database | `localhost:5433` | db `novatech`; connect with any SQL client |
 
