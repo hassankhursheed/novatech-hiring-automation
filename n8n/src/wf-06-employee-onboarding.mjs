@@ -1,7 +1,7 @@
 // WF-06 Employee Onboarding: employee record exactly once, simulated account, welcome + orientation, HR/manager
 // notice, completion notice, and an hourly sweep that reminds owners of overdue onboarding tasks.
 import {
-  Workflow, x, ESC, LAYOUT, FMT, sticky, execTrigger, schedule, webhook, pg, set, email, when, route, splitOut,
+  Workflow, x, ESC, LAYOUT, FMT, addNotes, execTrigger, schedule, webhook, pg, set, email, when, route, splitOut,
   handlerContext, addHandlerTail,
 } from './lib.mjs';
 
@@ -118,6 +118,6 @@ export default function build() {
   w.chain('Every Hour', 'Sweep Context', 'Claim Overdue Tasks', 'Start Sweep Log', 'Overdue Tasks', 'One Item per Task',
     'Remind Task Owner (SWF-02)', 'Finish Sweep');
 
-  w.add(sticky('Overview', '## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep** (or `POST /webhook/ops/onboarding-sweep`, header auth): `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.', { width: 620, height: 300 }));
+  addNotes(w, 'WF-06');
   return w.toJSON();
 }

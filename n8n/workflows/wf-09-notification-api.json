@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:41:19.500Z",
+  "updatedAt": "2026-10-05T23:37:55.702Z",
   "createdAt": "2026-10-02T19:38:54.312Z",
   "id": "ntWf09NotifyApi1",
   "name": "WF-09 Notification API",
@@ -350,13 +350,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -320,
-        120
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-09 Notification API\n`POST /webhook/ops/notify` (header auth, backend only). Body: `dedupe_key`, `template_key`, `recipient`, `subject`, `html`, optional `entity_type` / `entity_id` / `application_id`.\nThe message goes through **SWF-02**, so it is recorded in `ops.notifications`, sent at most once per dedupe key, and uses the same mail credential as every other message. Used for staff sign-in links.",
-        "width": 560,
-        "height": 220,
+        "content": "## WF-09 Notification API\n`POST /webhook/ops/notify` (header auth, backend only).\n\n### Body\n- `dedupe_key`, `template_key`, `recipient`, `subject`, `html`\n- optional `entity_type`, `entity_id`, `application_id`\n\nThe message goes through **SWF-02**: recorded in `ops.notifications`, sent at most once per dedupe key, with the same mail credential as every other email. Used for staff sign-in links.",
+        "width": 680,
+        "height": 300,
         "color": 5
       }
     }
@@ -424,9 +424,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "f8446b2e-5649-4b1b-8f9b-6417f954215d",
-  "activeVersionId": "f8446b2e-5649-4b1b-8f9b-6417f954215d",
-  "versionCounter": 2,
+  "versionId": "0b11c74d-f926-4dcc-9b17-c8dff825a25b",
+  "activeVersionId": "0b11c74d-f926-4dcc-9b17-c8dff825a25b",
+  "versionCounter": 3,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],

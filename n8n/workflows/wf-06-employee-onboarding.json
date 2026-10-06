@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:18:27.175Z",
+  "updatedAt": "2026-10-05T23:37:37.727Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf06Onboarding",
   "name": "WF-06 Employee Onboarding",
@@ -1268,13 +1268,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -320,
-        120
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-06 Employee Onboarding\n- **START_ONBOARDING** (offer accepted): `api.create_employee_from_offer` creates the employee **exactly once per offer** (unique offer_id), generates `NT-YYYY-NNN` and the company email, and creates the tasks from the templates. Account provisioning is simulated (`api.mark_account_provisioned`). Then the welcome email (with orientation) and the HR/manager/IT notice.\n- **Hourly sweep** (or `POST /webhook/ops/onboarding-sweep`, header auth): `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`, and each owner is reminded once per claim.\n- **NOTIFY_ONBOARDING_COMPLETE** when the last task is done.",
-        "width": 620,
-        "height": 300,
+        "content": "## WF-06 Employee Onboarding\n\n### START_ONBOARDING (offer accepted)\n- `api.create_employee_from_offer` creates the employee **exactly once per offer**, generates the `NT-YYYY-NNN` code and the company email, and creates the tasks from the templates.\n- Account provisioning is recorded (`api.mark_account_provisioned`).\n- Welcome email to the new employee (first day, orientation), notice to HR, the manager and IT.\n\n### Hourly sweep\n- Also on demand: `POST /webhook/ops/onboarding-sweep` (header auth).\n- `api.claim_overdue_onboarding_tasks` claims overdue tasks not reminded within `onboarding.overdue_reminder_every`; each owner is reminded once per claim.\n\n### NOTIFY_ONBOARDING_COMPLETE\n- When the last task is done, HR and the manager are told; the employee gets a closing update from WF-02.",
+        "width": 680,
+        "height": 480,
         "color": 5
       }
     }
@@ -1624,9 +1624,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "000f4279-556a-42b7-920f-13fc7642048f",
-  "activeVersionId": "000f4279-556a-42b7-920f-13fc7642048f",
-  "versionCounter": 2,
+  "versionId": "3c11565c-6097-45bd-b88a-0d1425f32094",
+  "activeVersionId": "3c11565c-6097-45bd-b88a-0d1425f32094",
+  "versionCounter": 3,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],

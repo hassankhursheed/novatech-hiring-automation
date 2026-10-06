@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:15:06.830Z",
+  "updatedAt": "2026-10-05T23:36:53.609Z",
   "createdAt": "2026-10-01T20:04:39.236Z",
   "id": "5ffc9mQNtFMFyUwW",
   "name": "WF-01 Application Intake",
@@ -649,20 +649,6 @@
       }
     },
     {
-      "id": "da5774d5-8517-4e2f-ac7b-823780416365",
-      "name": "Sticky Note ee850fea",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        100,
-        300
-      ],
-      "parameters": {
-        "content": "## WF-01 Application Intake (public webhook)\n`POST /webhook/applications` requires an **Idempotency-Key** header.\n1. `api.register_event` stores the raw payload before anything else, so nothing is silently dropped and a correlation id is assigned.\n2. A replay of a completed event returns 200 with the original result and creates nothing.\n3. Otherwise it replies **202** immediately, then validates through SWF-01 (retries) and persists through WF-02.\n4. If validation fails after retries, the event is marked FAILED and goes to the error queue. A replay redelivers the same key and body.\n`X-Fault-Inject` (dev only) is passed to the backend for failure demos.",
-        "color": 7
-      }
-    },
-    {
       "id": "e795e701-4f79-4c21-9472-f3eec12a5959",
       "name": "Kick Dispatcher (WF-00)",
       "type": "n8n-nodes-base.executeWorkflow",
@@ -693,6 +679,22 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "id": "300f1028-8895-580a-ac1a-64cf86eba3f9",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        40
+      ],
+      "parameters": {
+        "content": "## WF-01 Application Intake\nPublic entry point: `POST /webhook/applications` (the careers page). Requires an **Idempotency-Key** header.\n\n### Steps\n1. `api.register_event` stores the raw payload first: nothing is silently dropped and a correlation id is assigned.\n2. A replay of a completed event returns **200** with the original result and creates nothing.\n3. Otherwise it answers **202** at once, validates through **SWF-01** (with retries) and stores through **WF-02**, which emails the acknowledgement.\n4. If validation still fails after the retries, the event is marked FAILED and goes to the error queue; a replay redelivers the same key and body.\n\n`X-Fault-Inject` (development only) is passed to the backend for the failure demos.",
+        "width": 680,
+        "height": 420,
+        "color": 4
+      }
     }
   ],
   "connections": {
@@ -892,9 +894,9 @@
   },
   "nodeGroups": [],
   "pinData": null,
-  "versionId": "982c4dbd-6f91-4738-8380-f98ebcf695b5",
-  "activeVersionId": "982c4dbd-6f91-4738-8380-f98ebcf695b5",
-  "versionCounter": 4,
+  "versionId": "c4e87b0f-6f79-40f0-bf90-da4d39403435",
+  "activeVersionId": "c4e87b0f-6f79-40f0-bf90-da4d39403435",
+  "versionCounter": 5,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],

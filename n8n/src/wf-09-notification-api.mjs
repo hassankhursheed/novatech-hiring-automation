@@ -1,6 +1,6 @@
 // WF-09 Notification API: lets the backend send a one-off message (e.g. a staff sign-in link) through SWF-02,
 // so the mail provider stays configured in exactly one place and every message is sent at most once.
-import { Workflow, x, sticky, webhook, respond, set, exec, iff, cond } from './lib.mjs';
+import { Workflow, x, addNotes, webhook, respond, set, exec, iff, cond } from './lib.mjs';
 
 export default function build() {
   const w = new Workflow('WF-09',
@@ -33,6 +33,6 @@ export default function build() {
   w.add(respond('Respond Result', 200, '({ status: $json.status, duplicate_suppressed: Boolean($json.duplicate_suppressed) })'));
   w.chain('Message Requested', 'Message', 'Valid Message?', 'Send (SWF-02)', 'Respond Result');
   w.connect('Valid Message?', 'Respond 400', 1);
-  w.add(sticky('Overview', '## WF-09 Notification API\n`POST /webhook/ops/notify` (header auth, backend only). Body: `dedupe_key`, `template_key`, `recipient`, `subject`, `html`, optional `entity_type` / `entity_id` / `application_id`.\nThe message goes through **SWF-02**, so it is recorded in `ops.notifications`, sent at most once per dedupe key, and uses the same mail credential as every other message. Used for staff sign-in links.', { width: 560, height: 220 }));
+  addNotes(w, 'WF-09');
   return w.toJSON();
 }

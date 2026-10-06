@@ -1,20 +1,20 @@
 {
-  "updatedAt": "2026-10-02T19:15:20.297Z",
+  "updatedAt": "2026-10-05T23:37:02.042Z",
   "createdAt": "2026-10-01T20:02:35.586Z",
   "id": "76ahG9hzRP7cuQL4",
   "name": "WF-02 Candidate Processing",
-  "description": "WF-02: persists a validated submission (candidate upsert, duplicate detection, application + state machine) and sends one acknowledgement per event; also sends rejection notices for the dispatcher after re-checking state.",
+  "description": "WF-02: persists submissions (one transaction: candidate, duplicate check, application) and keeps the candidate informed by email: acknowledgement, rejection notice and a status update at every candidate-facing step.",
   "active": true,
   "isArchived": false,
   "nodes": [
     {
-      "id": "8bb81777-45da-4b14-9ece-98a2ab2f8534",
+      "id": "3c8f48e7-5b07-54e5-ad40-6eb480055c73",
       "name": "When Called by Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.2,
       "position": [
-        200,
-        400
+        240,
+        320
       ],
       "parameters": {
         "inputSource": "workflowInputs",
@@ -45,13 +45,13 @@
       }
     },
     {
-      "id": "9fe2ffe3-ab4f-49cb-8a47-b2d3b317362f",
+      "id": "c288f60e-52b5-5797-a581-e68e5eb5366d",
       "name": "Build Context",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        420,
-        400
+        500,
+        320
       ],
       "parameters": {
         "mode": "manual",
@@ -59,9 +59,9 @@
         "assignments": {
           "assignments": [
             {
-              "id": "ctx",
+              "id": "b3a2db4d-8b8a-5f29-af8e-fe15008d62b3",
               "name": "ctx",
-              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-02\", workflow_version: \"1.0.0\", execution_id: $execution.id, correlation_id: $json.correlation_id || $json.action?.correlation_id || null }) }}",
+              "value": "={{ ({ actor_type: \"SYSTEM\", actor_id: \"n8n\", workflow_name: \"WF-02\", workflow_version: \"1.1.0\", execution_id: $execution.id, correlation_id: $json.correlation_id || $json.action?.correlation_id || null }) }}",
               "type": "object"
             }
           ]
@@ -69,13 +69,13 @@
       }
     },
     {
-      "id": "18f77a6f-1c0e-4245-9045-479a0cdb6fdc",
+      "id": "99ed8efc-a0d6-5f4d-a6ad-ebb2da897e36",
       "name": "Intake or Action?",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        640,
-        400
+        760,
+        320
       ],
       "parameters": {
         "mode": "rules",
@@ -86,13 +86,15 @@
               "renameOutput": true,
               "conditions": {
                 "options": {
-                  "caseSensitive": false,
+                  "caseSensitive": true,
                   "leftValue": "",
-                  "typeValidation": "strict"
+                  "typeValidation": "strict",
+                  "version": 2
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.mode }}",
+                    "id": "ea890f08-3da6-57dd-a7b8-883feadc7b11",
+                    "leftValue": "={{ $json.mode === \"intake\" ? \"intake\" : ($json.action?.action_type || \"\") }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -104,17 +106,19 @@
               }
             },
             {
-              "outputKey": "rejection notice",
+              "outputKey": "SEND_REJECTION_NOTICE",
               "renameOutput": true,
               "conditions": {
                 "options": {
-                  "caseSensitive": false,
+                  "caseSensitive": true,
                   "leftValue": "",
-                  "typeValidation": "strict"
+                  "typeValidation": "strict",
+                  "version": 2
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.action?.action_type }}",
+                    "id": "bf4eb4f3-286e-53d3-a20e-e5a9ac6a3e7b",
+                    "leftValue": "={{ $json.mode === \"intake\" ? \"intake\" : ($json.action?.action_type || \"\") }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -124,20 +128,47 @@
                 ],
                 "combinator": "and"
               }
+            },
+            {
+              "outputKey": "NOTIFY_CANDIDATE",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0e5e5e26-0516-5640-a227-f2f0ffc3d1f7",
+                    "leftValue": "={{ $json.mode === \"intake\" ? \"intake\" : ($json.action?.action_type || \"\") }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NOTIFY_CANDIDATE"
+                  }
+                ],
+                "combinator": "and"
+              }
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unknown"
+        }
       }
     },
     {
-      "id": "0810e762-27bb-496f-a2c6-acd0ad7aca55",
+      "id": "b8528a28-aaf1-5991-a861-41bd9b00de5b",
       "name": "Start Execution Log",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        860,
-        240
+        1020,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
@@ -154,19 +185,19 @@
       }
     },
     {
-      "id": "c1ccef7f-cf93-45fb-bb40-911afb497345",
+      "id": "74278523-b366-508c-a2cc-ee6eca92aa3f",
       "name": "Persist Application",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1080,
-        240
+        1280,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT * FROM api.submit_application($1::uuid, $2::jsonb, $3::jsonb)",
         "options": {
-          "queryReplacement": "={{ [ $(\"Build Context\").item.json.event_id, JSON.stringify($(\"Build Context\").item.json.validation), JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+          "queryReplacement": "={{ [ $(\"Build Context\").first().json.event_id, JSON.stringify($(\"Build Context\").first().json.validation), JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
         }
       },
       "credentials": {
@@ -175,19 +206,38 @@
           "name": "NovaTech DB (n8n_app)"
         }
       },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 1000,
       "onError": "continueErrorOutput"
     },
     {
-      "id": "0fe38e66-df97-4c0a-be29-9e1bb63589a4",
+      "id": "958552f6-4ce6-5bec-a8ae-2318dc7f7be3",
+      "name": "Load Company",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.name') AS company_name",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "0eca1c8b-75b7-509d-a733-4b517debfb79",
       "name": "Compose Candidate Message",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1300,
-        160
+        1800,
+        320
       ],
       "parameters": {
         "mode": "manual",
@@ -195,39 +245,39 @@
         "assignments": {
           "assignments": [
             {
-              "id": "recipient",
+              "id": "2c18ce4b-c344-5aef-a2eb-90efdc0c28ba",
               "name": "recipient",
-              "value": "={{ $(\"Build Context\").item.json.validation?.application?.email || \"\" }}",
+              "value": "={{ $(\"Build Context\").first().json.validation?.application?.email || \"\" }}",
               "type": "string"
             },
             {
-              "id": "template",
+              "id": "d26eaa25-1a66-5de7-ad76-df092c3c5da1",
               "name": "template_key",
-              "value": "={{ ({ ACCEPTED: \"application.received\", NEEDS_REVIEW: \"application.received\", DUPLICATE: \"application.duplicate\", INVALID: \"application.invalid\" })[$json.outcome] || \"application.received\" }}",
+              "value": "={{ ({ ACCEPTED: \"application.received\", NEEDS_REVIEW: \"application.received\", DUPLICATE: \"application.duplicate\", INVALID: \"application.invalid\" })[$(\"Persist Application\").first().json.outcome] || \"application.received\" }}",
               "type": "string"
             },
             {
-              "id": "dedupe",
+              "id": "51c20bff-80c1-5ddf-a4a4-3444ab95a029",
               "name": "dedupe_key",
-              "value": "={{ \"candidate.ack:\" + $(\"Build Context\").item.json.event_id }}",
+              "value": "={{ \"candidate.ack:\" + $(\"Build Context\").first().json.event_id }}",
               "type": "string"
             },
             {
-              "id": "subject",
+              "id": "64ddbf7d-03f9-5905-a450-66c9d42b2c9c",
               "name": "subject",
-              "value": "={{ (() => { const p = $(\"Build Context\").item.json.validation?.application?.position_title || \"your application\"; const o = $json.outcome; if (o === \"DUPLICATE\") return \"We already have your application for \" + p; if (o === \"INVALID\") return \"We could not process your application\"; return \"We received your application for \" + p; })() }}",
+              "value": "={{ (() => { const p = $(\"Build Context\").first().json.validation?.application?.position_title || \"your application\"; const o = $(\"Persist Application\").first().json.outcome; if (o === \"DUPLICATE\") return \"We already have your application for \" + p; if (o === \"INVALID\") return \"We could not process your application\"; return \"We received your application for \" + p; })() }}",
               "type": "string"
             },
             {
-              "id": "html",
+              "id": "0f897ec9-752c-5293-a318-898869b0d607",
               "name": "html",
-              "value": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"]/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", \"\\\"\": \"&quot;\" })[c]); const a = $(\"Build Context\").item.json.validation?.application || {}; const name = esc(a.full_name || \"Applicant\"); const pos = esc(a.position_title || \"the position\"); const code = esc($json.application_code || \"\"); const o = $json.outcome; let body; if (o === \"DUPLICATE\") { body = \"<p>We already have an active application from you for <b>\" + pos + \"</b> (reference \" + code + \"). There is no need to apply again; we will update you on the existing application.</p>\"; } else if (o === \"INVALID\") { body = \"<p>Unfortunately we could not process your application: \" + esc($json.reason || \"some required information was missing\") + \".</p><p>Please submit the form again with the missing details.</p>\"; } else { body = \"<p>Thank you for applying for <b>\" + pos + \"</b> at NovaTech Solutions. Your reference number is <b>\" + code + \"</b>.</p><p>Our team will review your application and contact you about the next steps.</p>\"; } return \"<p>Dear \" + name + \",</p>\" + body + \"<p>Kind regards,<br/>NovaTech Talent Team</p>\"; })() }}",
+              "value": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const r = $(\"Persist Application\").first().json; const company = $json.company_name || \"NovaTech Solutions\"; const a = $(\"Build Context\").first().json.validation?.application || {}; const pos = esc(a.position_title || \"the position\"); const code = esc(r.application_code || \"\"); let body; if (r.outcome === \"DUPLICATE\") { body = \"<p>We already have an active application from you for <b>\" + pos + \"</b> (reference \" + code + \"). There is no need to apply again; we will keep you updated on that application.</p>\"; } else if (r.outcome === \"INVALID\") { body = \"<p>Unfortunately we could not process your application: \" + esc(r.reason || \"some required information was missing\") + \".</p><p>Please submit the form again with the missing details.</p>\"; } else { body = \"<p>Thank you for applying for <b>\" + pos + \"</b> at \" + esc(company) + \". Your reference number is <b>\" + code + \"</b>.</p><p>Here is what happens next: we check your application, a recruiter reviews it, and you will receive an email from us at every step, whether that is an interview invitation or another update.</p>\"; } return layout(\"<p>Dear \" + esc(a.full_name || \"applicant\") + \",</p>\" + body + \"<p>Kind regards,<br/>\" + esc(company) + \" Talent Team</p>\", \"Reference \" + code); })() }}",
               "type": "string"
             },
             {
-              "id": "appid",
+              "id": "18c458a1-783b-5ec2-a30a-1abdba9916f1",
               "name": "application_id",
-              "value": "={{ $json.application_id || \"\" }}",
+              "value": "={{ $(\"Persist Application\").first().json.application_id || \"\" }}",
               "type": "string"
             }
           ]
@@ -235,44 +285,47 @@
       }
     },
     {
-      "id": "135d88c9-d7d2-4459-b0e9-dc4ccc41c548",
+      "id": "554516fd-41dc-5426-aa3f-53616d12b99b",
       "name": "Has Valid Email?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1520,
-        160
+        2060,
+        320
       ],
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose",
+            "version": 3
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.recipient }}",
+              "id": "afc00a48-afd5-549d-abfd-1d897b864849",
+              "leftValue": "={{ Boolean($json.recipient) }}",
               "operator": {
-                "type": "string",
-                "operation": "notEmpty",
+                "type": "boolean",
+                "operation": "true",
                 "singleValue": true
               },
               "rightValue": ""
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {
-      "id": "c01a5a62-9415-4e6a-9ccf-fd4b7dec3fad",
+      "id": "b170e35e-63fc-59e0-a861-f1a433a456c5",
       "name": "Send Acknowledgement (SWF-02)",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1740,
-        80
+        2320,
+        320
       ],
       "parameters": {
         "mode": "once",
@@ -286,7 +339,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
             "dedupe_key": "={{ $json.dedupe_key }}",
             "channel": "EMAIL",
             "template_key": "={{ $json.template_key }}",
@@ -399,19 +452,19 @@
       }
     },
     {
-      "id": "3aa4699e-e963-4beb-a879-adb723ab3a03",
+      "id": "d71423c8-500f-5e9f-aa2d-209cf0f8cf50",
       "name": "Finish Execution Log",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        1960,
-        160
+        2580,
+        320
       ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT api.finish_workflow_execution($1::jsonb, 'SUCCEEDED') AS duration_ms",
         "options": {
-          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").item.json.ctx) ] }}"
+          "queryReplacement": "={{ [ JSON.stringify($(\"Build Context\").first().json.ctx) ] }}"
         }
       },
       "credentials": {
@@ -422,13 +475,120 @@
       }
     },
     {
-      "id": "23e5f642-71e9-4998-a56b-c6eb3a546dd0",
+      "id": "7744ef2d-59ea-598d-a77a-c6ac8ca2354f",
+      "name": "Return Intake Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2840,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa5a2e49-33f6-50ed-a15a-f38024887d40",
+              "name": "outcome",
+              "value": "={{ $(\"Persist Application\").first().json.outcome }}",
+              "type": "string"
+            },
+            {
+              "id": "4d31a556-7c58-5447-afe9-f6c06c1b75e7",
+              "name": "status",
+              "value": "={{ $(\"Persist Application\").first().json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "6e7dabf0-4106-5807-ad2b-bff5bb922fc2",
+              "name": "application_id",
+              "value": "={{ $(\"Persist Application\").first().json.application_id }}",
+              "type": "string"
+            },
+            {
+              "id": "bcd96b6f-0e55-52d6-a1eb-76c4e8e742cb",
+              "name": "application_code",
+              "value": "={{ $(\"Persist Application\").first().json.application_code }}",
+              "type": "string"
+            },
+            {
+              "id": "8faf2619-e02d-5e9b-a236-580785ed2000",
+              "name": "correlation_id",
+              "value": "={{ $(\"Persist Application\").first().json.correlation_id }}",
+              "type": "string"
+            },
+            {
+              "id": "19a563b8-1a4a-5c0b-af74-d75d902882ff",
+              "name": "replayed",
+              "value": "={{ $(\"Persist Application\").first().json.replayed }}",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8405b038-7373-575c-a5cf-a0f29478cae2",
+      "name": "Record Failure (SWF-03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        520
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "IBNva3yYim0EcUCT",
+          "cachedResultName": "SWF-03 Fail & Record Error"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "error": "={{ (() => { const msg = String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"persist failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); const b = $(\"Build Context\").first().json; return { workflow_name: \"WF-02\", node_name: \"Persist Application\", error_class: m ? \"NON_RETRYABLE\" : \"UNKNOWN\", error_code: m ? m[1] : \"DB_ERROR\", error_message: msg, entity_type: \"EVENT\", entity_id: b.event_id, replay_workflow: \"WF-02\", payload: { mode: \"intake\", event_id: b.event_id, correlation_id: b.correlation_id, validation: b.validation } }; })() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "7f86308a-2374-5450-a37b-f179dff407b5",
       "name": "Load Application State",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        860,
-        600
+        1020,
+        520
       ],
       "parameters": {
         "operation": "executeQuery",
@@ -445,52 +605,47 @@
       }
     },
     {
-      "id": "fd92dd09-e6aa-4f4f-860a-a7addad5bad3",
+      "id": "39c81bb7-9c05-5dbf-a8e4-735531d3710b",
       "name": "Still Rejected With Email?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1080,
-        600
+        1280,
+        520
       ],
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose",
+            "version": 3
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.app?.status }}",
+              "id": "781c5571-a39e-510d-a87f-815f1752d69b",
+              "leftValue": "={{ Boolean($json.app?.status === \"REJECTED\" && $json.app?.candidate?.email) }}",
               "operator": {
-                "type": "string",
-                "operation": "equals"
-              },
-              "rightValue": "REJECTED"
-            },
-            {
-              "leftValue": "={{ $json.app?.candidate?.email || \"\" }}",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
+                "type": "boolean",
+                "operation": "true",
                 "singleValue": true
               },
               "rightValue": ""
             }
           ],
           "combinator": "and"
-        }
+        },
+        "options": {}
       }
     },
     {
-      "id": "8e4a4bf8-fa94-45ed-b50e-4bfb8cd62df3",
+      "id": "02b663b0-dc15-5dcc-aee8-587c8f27c1f5",
       "name": "Send Rejection Notice (SWF-02)",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1300,
-        520
+        1540,
+        720
       ],
       "parameters": {
         "mode": "once",
@@ -504,13 +659,13 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
             "dedupe_key": "={{ \"candidate.rejection:\" + $json.app.application_id }}",
             "channel": "EMAIL",
             "template_key": "application.rejected",
             "recipient": "={{ $json.app.candidate.email }}",
-            "subject": "={{ \"Your application for \" + $json.app.position.title + \" at NovaTech Solutions\" }}",
-            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"]/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", \"\\\"\": \"&quot;\" })[c]); return \"<p>Dear \" + esc($json.app.candidate.full_name) + \",</p><p>Thank you for your interest in the <b>\" + esc($json.app.position.title) + \"</b> role (reference \" + esc($json.app.application_code) + \").</p><p>After careful review we have decided not to move forward with your application at this time. We will keep your details on file and encourage you to apply for future openings.</p><p>Kind regards,<br/>NovaTech Talent Team</p>\"; })() }}",
+            "subject": "={{ \"Your application for \" + $json.app.position.title + \" at \" + $json.app.company.name }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const a = $json.app; return layout(\"<p>Dear \" + esc(a.candidate.full_name) + \",</p><p>Thank you for your interest in the <b>\" + esc(a.position.title) + \"</b> role (reference \" + esc(a.application_code) + \") and for the time you put into your application.</p><p>After careful review we have decided not to move forward with your application at this time. This was not an easy decision, and we encourage you to apply for future openings that match your experience.</p><p>Kind regards,<br/>\" + esc(a.company.name) + \" Talent Team</p>\", \"Reference \" + esc(a.application_code)); })() }}",
             "application_id": "={{ $json.app.application_id }}",
             "entity_type": "APPLICATION",
             "entity_id": "={{ $json.app.application_id }}"
@@ -617,12 +772,12 @@
       }
     },
     {
-      "id": "f6d504db-d1d8-48b8-aa0b-7d98ebe8bf55",
+      "id": "a63061e9-1039-5912-a937-873bb31ed5f4",
       "name": "Return Action Result",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1520,
+        1800,
         520
       ],
       "parameters": {
@@ -631,15 +786,15 @@
         "assignments": {
           "assignments": [
             {
-              "id": "outcome",
+              "id": "5ba5204b-c5e3-5806-a46d-a88886b7e5a7",
               "name": "action_outcome",
               "value": "={{ $json.status === \"FAILED\" ? \"FAILED\" : \"DONE\" }}",
               "type": "string"
             },
             {
-              "id": "reason",
+              "id": "972a5f59-01cc-57b4-a358-873a401f75d7",
               "name": "action_reason",
-              "value": "={{ $json.status === \"FAILED\" ? \"rejection notice could not be sent\" : ($json.duplicate_suppressed ? \"already sent\" : \"rejection notice sent\") }}",
+              "value": "={{ $json.status === \"FAILED\" ? \"rejection notice could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"already sent\" : \"rejection notice sent\") }}",
               "type": "string"
             }
           ]
@@ -647,13 +802,13 @@
       }
     },
     {
-      "id": "d2ef3243-b606-4e8b-9d50-bdaff43cc77d",
+      "id": "16bd4aeb-4ea7-5275-a5c6-e2c78d0af513",
       "name": "Skip: State Changed",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1300,
-        700
+        1540,
+        920
       ],
       "parameters": {
         "mode": "manual",
@@ -661,13 +816,13 @@
         "assignments": {
           "assignments": [
             {
-              "id": "outcome",
+              "id": "421d9ec3-913f-585f-ab7b-bff24ecfc3ac",
               "name": "action_outcome",
               "value": "SKIPPED",
               "type": "string"
             },
             {
-              "id": "reason",
+              "id": "71e67297-250c-5850-a971-5e26c84845a3",
               "name": "action_reason",
               "value": "={{ \"application is \" + ($json.app?.status || \"missing\") + \" or has no email\" }}",
               "type": "string"
@@ -677,67 +832,70 @@
       }
     },
     {
-      "id": "dd26ce6c-b4ad-4375-8f48-b0caf48e6764",
-      "name": "Return Intake Result",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.5,
+      "id": "9b6c286a-aa1d-5089-af15-943090c83e6b",
+      "name": "Load Update State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
       "position": [
-        2180,
-        160
+        1020,
+        720
       ],
       "parameters": {
-        "mode": "manual",
-        "includeOtherFields": false,
-        "assignments": {
-          "assignments": [
-            {
-              "id": "outcome",
-              "name": "outcome",
-              "value": "={{ $(\"Persist Application\").item.json.outcome }}",
-              "type": "string"
-            },
-            {
-              "id": "status",
-              "name": "status",
-              "value": "={{ $(\"Persist Application\").item.json.status }}",
-              "type": "string"
-            },
-            {
-              "id": "appid",
-              "name": "application_id",
-              "value": "={{ $(\"Persist Application\").item.json.application_id }}",
-              "type": "string"
-            },
-            {
-              "id": "appcode",
-              "name": "application_code",
-              "value": "={{ $(\"Persist Application\").item.json.application_code }}",
-              "type": "string"
-            },
-            {
-              "id": "corr",
-              "name": "correlation_id",
-              "value": "={{ $(\"Persist Application\").item.json.correlation_id }}",
-              "type": "string"
-            },
-            {
-              "id": "replayed",
-              "name": "replayed",
-              "value": "={{ $(\"Persist Application\").item.json.replayed }}",
-              "type": "boolean"
-            }
-          ]
+        "operation": "executeQuery",
+        "query": "SELECT api.application_snapshot($1::uuid) AS app,\n       NOT EXISTS (SELECT 1 FROM hiring.candidate_status_history h\n                     JOIN hiring.application_statuses st ON st.code = h.to_status\n                    WHERE h.application_id = $1::uuid AND h.id > $2::bigint AND st.candidate_informed) AS still_relevant,\n       $3::text AS template_key, $4::text AS from_status",
+        "options": {
+          "queryReplacement": "={{ [ $json.action.application_id, $json.action.payload?.history_id || 0, $json.action.payload?.template_key || \"\", $json.action.payload?.from_status || \"\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "ntPostgresApp001",
+          "name": "NovaTech DB (n8n_app)"
         }
       }
     },
     {
-      "id": "2c7bcdcd-2c94-44bf-b895-b9c16e21932d",
-      "name": "Record Failure (SWF-03)",
+      "id": "265cc5d2-5cdc-5e87-ae7b-1dab9c992daa",
+      "name": "Update Still Relevant?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2fc5acb4-7d25-5339-a1d3-e2850598692b",
+              "leftValue": "={{ Boolean($json.still_relevant && $json.app?.candidate?.email && $json.template_key) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c5850fe3-d566-5a19-a227-6bbf78b8f6f4",
+      "name": "Send Status Update (SWF-02)",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        1300,
-        360
+        1540,
+        1120
       ],
       "parameters": {
         "mode": "once",
@@ -745,14 +903,22 @@
         "workflowId": {
           "__rl": true,
           "mode": "id",
-          "value": "IBNva3yYim0EcUCT",
-          "cachedResultName": "SWF-03 Fail & Record Error"
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "ctx": "={{ $(\"Build Context\").item.json.ctx }}",
-            "error": "={{ (() => { const msg = String($json.message ?? $json.error?.message ?? (typeof $json.error === \"string\" ? $json.error : $json.error?.description) ?? \"persist failed\"); const m = msg.match(/^([A-Z][A-Z0-9_]+): /); return { workflow_name: \"WF-02\", node_name: \"Persist Application\", error_class: m ? \"NON_RETRYABLE\" : \"UNKNOWN\", error_code: m ? m[1] : \"DB_ERROR\", error_message: msg, entity_type: \"EVENT\", entity_id: $(\"Build Context\").item.json.event_id, replay_workflow: \"WF-02\", payload: { mode: \"intake\", event_id: $(\"Build Context\").item.json.event_id, correlation_id: $(\"Build Context\").item.json.correlation_id, validation: $(\"Build Context\").item.json.validation } }; })() }}"
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"candidate.update:\" + $json.app.application_id + \":\" + $(\"Build Context\").first().json.action.payload.history_id }}",
+            "channel": "EMAIL",
+            "template_key": "={{ $json.template_key }}",
+            "recipient": "={{ $json.app.candidate.email }}",
+            "subject": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const UPDATES = {\n  \"application.under_review\": (s, from) => from === \"SHORTLISTED\" ? ({\n    subject: \"Your interview invitation for \" + s.app.position.title + \" has expired\",\n    body: \"<p>The interview invitation for <b>\" + esc(s.app.position.title) + \"</b> expired before a time was chosen, so your application (reference \" + esc(s.app.application_code) + \") is back with our recruitment team.</p><p>A recruiter will look at it again and email you about the next step.</p>\",\n  }) : ({\n    subject: \"Your application for \" + s.app.position.title + \" is being reviewed\",\n    body: \"<p>Thank you for applying for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \").</p><p>Your application has passed our first checks and is now with a recruiter for a closer review. We will email you as soon as there is a decision on the next step.</p>\",\n  }),\n  \"interview.completed\": (s) => ({\n    subject: \"Thank you for interviewing for \" + s.app.position.title,\n    body: \"<p>Thank you for taking the time to interview for <b>\" + esc(s.app.position.title) + \"</b>.</p><p>Your interviewer has shared their feedback and we are now making a decision. We will email you with the outcome as soon as it is ready.</p>\",\n  }),\n  \"application.selected\": (s) => ({\n    subject: \"Good news about your application for \" + s.app.position.title,\n    body: \"<p>We are pleased to tell you that you have been <b>selected</b> for the <b>\" + esc(s.app.position.title) + \"</b> position.</p><p>We are now preparing your written offer. Once it has been approved internally, you will receive it by email with a personal link where you can read the terms, download the offer letter and respond.</p>\",\n  }),\n  \"onboarding.finished\": (s) => ({\n    subject: \"Your onboarding at \" + s.app.company.name + \" is complete\",\n    body: \"<p>All of your onboarding steps for the <b>\" + esc(s.app.position.title) + \"</b> role are complete. Welcome to the team!</p><p>Your manager and the People team are your contacts from here on.</p>\",\n  }),\n  \"application.withdrawn\": (s) => ({\n    subject: \"Your application for \" + s.app.position.title + \" has been withdrawn\",\n    body: \"<p>This is to confirm that your application for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \") has been withdrawn, and any interview or offer that was open has been cancelled.</p><p>You are welcome to apply again for this or any future opening.</p>\",\n  }),\n}; const t = UPDATES[$json.template_key]; return t ? t({ app: $json.app }, $json.from_status).subject : \"An update on your application\"; })() }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const UPDATES = {\n  \"application.under_review\": (s, from) => from === \"SHORTLISTED\" ? ({\n    subject: \"Your interview invitation for \" + s.app.position.title + \" has expired\",\n    body: \"<p>The interview invitation for <b>\" + esc(s.app.position.title) + \"</b> expired before a time was chosen, so your application (reference \" + esc(s.app.application_code) + \") is back with our recruitment team.</p><p>A recruiter will look at it again and email you about the next step.</p>\",\n  }) : ({\n    subject: \"Your application for \" + s.app.position.title + \" is being reviewed\",\n    body: \"<p>Thank you for applying for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \").</p><p>Your application has passed our first checks and is now with a recruiter for a closer review. We will email you as soon as there is a decision on the next step.</p>\",\n  }),\n  \"interview.completed\": (s) => ({\n    subject: \"Thank you for interviewing for \" + s.app.position.title,\n    body: \"<p>Thank you for taking the time to interview for <b>\" + esc(s.app.position.title) + \"</b>.</p><p>Your interviewer has shared their feedback and we are now making a decision. We will email you with the outcome as soon as it is ready.</p>\",\n  }),\n  \"application.selected\": (s) => ({\n    subject: \"Good news about your application for \" + s.app.position.title,\n    body: \"<p>We are pleased to tell you that you have been <b>selected</b> for the <b>\" + esc(s.app.position.title) + \"</b> position.</p><p>We are now preparing your written offer. Once it has been approved internally, you will receive it by email with a personal link where you can read the terms, download the offer letter and respond.</p>\",\n  }),\n  \"onboarding.finished\": (s) => ({\n    subject: \"Your onboarding at \" + s.app.company.name + \" is complete\",\n    body: \"<p>All of your onboarding steps for the <b>\" + esc(s.app.position.title) + \"</b> role are complete. Welcome to the team!</p><p>Your manager and the People team are your contacts from here on.</p>\",\n  }),\n  \"application.withdrawn\": (s) => ({\n    subject: \"Your application for \" + s.app.position.title + \" has been withdrawn\",\n    body: \"<p>This is to confirm that your application for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \") has been withdrawn, and any interview or offer that was open has been cancelled.</p><p>You are welcome to apply again for this or any future opening.</p>\",\n  }),\n}; const a = $json.app; const t = UPDATES[$json.template_key]; const body = t ? t({ app: a }, $json.from_status).body : \"<p>There is an update on your application for <b>\" + esc(a.position.title) + \"</b>. We will contact you shortly.</p>\"; return layout(\"<p>Dear \" + esc(a.candidate.full_name) + \",</p>\" + body + \"<p>Kind regards,<br/>\" + esc(a.company.name) + \" Talent Team</p>\", \"Reference \" + esc(a.application_code)); })() }}",
+            "application_id": "={{ $json.app.application_id }}",
+            "entity_type": "APPLICATION",
+            "entity_id": "={{ $json.app.application_id }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -766,13 +932,85 @@
               "type": "object"
             },
             {
-              "id": "error",
-              "displayName": "error",
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
               "required": false,
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "object"
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
             }
           ],
           "attemptToConvertTypes": false,
@@ -784,16 +1022,108 @@
       }
     },
     {
-      "id": "fca71ed9-7c2d-4fea-b252-4d5d2214ccb7",
-      "name": "Sticky Note 2eb35c0c",
+      "id": "8d1dfa57-d1f2-5e1f-ac75-6a4fa73bb604",
+      "name": "Return Update Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1800,
+        720
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9bd7553f-756d-5453-ad73-267c6529af85",
+              "name": "action_outcome",
+              "value": "={{ $json.status === \"FAILED\" ? \"FAILED\" : \"DONE\" }}",
+              "type": "string"
+            },
+            {
+              "id": "078c8eff-b9d4-5674-a091-909953838158",
+              "name": "action_reason",
+              "value": "={{ $json.status === \"FAILED\" ? \"status update could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"status update already sent\" : \"status update sent: \" + $(\"Load Update State\").first().json.template_key) }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2d6b7a65-e73a-586d-a887-ceb2318c3a97",
+      "name": "Skip: Update Superseded",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1540,
+        1320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b2e03569-d844-530e-af72-2fbf6316d7dc",
+              "name": "action_outcome",
+              "value": "SKIPPED",
+              "type": "string"
+            },
+            {
+              "id": "9968966b-b5f6-5fb8-a83f-209d305080ae",
+              "name": "action_reason",
+              "value": "={{ !$json.app ? \"application missing\" : (!$json.app.candidate?.email ? \"candidate has no email\" : (!$json.template_key ? \"no template in the action\" : \"a later step already emailed the candidate (now \" + $json.app.status + \")\")) }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5537aa36-6dee-559b-a423-a16d24707554",
+      "name": "Result: Unknown Action",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1020,
+        920
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e61e6e1-95ef-546d-acf9-7f4d832c902a",
+              "name": "action_outcome",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "7868cdda-0583-58a0-a7d5-ee7866845d26",
+              "name": "action_reason",
+              "value": "={{ \"WF-02 has no handler for \" + ($json.action?.action_type || $json.mode || \"this call\") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "87fb1832-993a-59f2-a8ba-9e0441d7d2cf",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        100,
-        300
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-02 Candidate Processing\n**Intake** (called by WF-01): `api.submit_application` runs one transaction that upserts the candidate, detects duplicates and creates the application (NEW -> VALIDATING -> VALIDATED / SCREENING_REVIEW). A replayed event returns its stored result. It then sends exactly one acknowledgement per event (SWF-02 dedupe key).\n**Action SEND_REJECTION_NOTICE** (called by WF-00): re-checks that the application is still REJECTED before emailing.\nFailures go to SWF-03 with replay target WF-02.",
+        "content": "## WF-02 Candidate Processing\nStores every submission and makes sure the candidate **hears from us at every step**.\n\n### Intake (called by WF-01)\n- `api.submit_application` runs one transaction: candidate upsert, duplicate check, application `NEW → VALIDATING → VALIDATED / SCREENING_REVIEW`.\n- A replayed event returns its stored result; the acknowledgement goes out once per event (SWF-02 dedupe key).\n\n### Rejection notice (`SEND_REJECTION_NOTICE`)\n- Re-checks that the application is still `REJECTED` before emailing.\n\n### Status updates (`NOTIFY_CANDIDATE`)\n- Queued by the database together with the status change (`application_statuses.candidate_notice`): under review, interview completed, selected, onboarding finished, withdrawn.\n- Skipped when a later step already emailed the candidate, so emails never arrive out of order.\n- Internal reasons are never part of a candidate email.\n\nFailures go to SWF-03 with replay target WF-02.",
+        "width": 680,
+        "height": 540,
         "color": 6
       }
     }
@@ -836,6 +1166,20 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Load Update State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Unknown Action",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -854,7 +1198,7 @@
       "main": [
         [
           {
-            "node": "Compose Candidate Message",
+            "node": "Load Company",
             "type": "main",
             "index": 0
           }
@@ -862,6 +1206,17 @@
         [
           {
             "node": "Record Failure (SWF-03)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Company": {
+      "main": [
+        [
+          {
+            "node": "Compose Candidate Message",
             "type": "main",
             "index": 0
           }
@@ -958,13 +1313,53 @@
           }
         ]
       ]
+    },
+    "Load Update State": {
+      "main": [
+        [
+          {
+            "node": "Update Still Relevant?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Still Relevant?": {
+      "main": [
+        [
+          {
+            "node": "Send Status Update (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: Update Superseded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Status Update (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Return Update Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": true,
-    "errorWorkflow": "ntWf07ErrRecover",
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "ntWf07ErrRecover"
   },
   "staticData": null,
   "meta": {
@@ -972,10 +1367,10 @@
     "builderVariant": "mcp"
   },
   "nodeGroups": [],
-  "pinData": null,
-  "versionId": "3fa5fe06-be45-4f7b-9a98-738c686acb45",
-  "activeVersionId": "3fa5fe06-be45-4f7b-9a98-738c686acb45",
-  "versionCounter": 3,
+  "pinData": {},
+  "versionId": "e4388f9d-4f68-4cda-bf73-a708d9a60e49",
+  "activeVersionId": "e4388f9d-4f68-4cda-bf73-a708d9a60e49",
+  "versionCounter": 4,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
@@ -1000,7 +1395,7 @@
     }
   ],
   "versionMetadata": {
-    "name": "Initial candidate processing",
-    "description": "Created with 17 nodes: When Called by Workflow, Build Context, Intake or Action?, Start Execution Log, Persist Application and 12 more"
+    "name": null,
+    "description": null
   }
 }

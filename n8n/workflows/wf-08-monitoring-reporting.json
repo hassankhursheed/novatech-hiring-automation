@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:18:35.189Z",
+  "updatedAt": "2026-10-05T23:37:46.824Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf08Monitoring",
   "name": "WF-08 Monitoring & Reporting",
@@ -1031,13 +1031,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -320,
-        120
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-08 Monitoring & Reporting\n**Daily report** (09:00 company time; on demand: `POST /webhook/ops/daily-report` with header auth and `{\"report_date\": \"YYYY-MM-DD\", \"force\": false}`): every number comes from `reporting.daily_metrics`. The backend writes the prose and rejects AI text that contains any number not in the metrics. One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).\n**Review alerts**: WF-00 action `NOTIFY_REVIEW_QUEUE` emails recruiters (screening review) or the hiring manager (interview review) after re-checking that the case still needs a person.",
-        "width": 620,
-        "height": 300,
+        "content": "## WF-08 Monitoring & Reporting\n\n### Daily report (09:00 company time)\n- On demand: `POST /webhook/ops/daily-report` (header auth) with `{\"report_date\": \"YYYY-MM-DD\", \"force\": false}`.\n- Every number comes from `reporting.daily_metrics`. The backend writes the prose (Mistral) and rejects any AI text that contains a number that is not in the metrics.\n- One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).\n\n### Review alerts (`NOTIFY_REVIEW_QUEUE`)\n- Emails recruiters (screening review) or the hiring manager (interview review), after re-checking that the case still needs a person.",
+        "width": 680,
+        "height": 380,
         "color": 5
       }
     }
@@ -1286,9 +1286,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "fcb45108-bb82-4fae-8c53-2fc4cde0f49a",
-  "activeVersionId": "fcb45108-bb82-4fae-8c53-2fc4cde0f49a",
-  "versionCounter": 1,
+  "versionId": "38c3207a-5686-4177-8069-bd27c7450caf",
+  "activeVersionId": "38c3207a-5686-4177-8069-bd27c7450caf",
+  "versionCounter": 2,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],

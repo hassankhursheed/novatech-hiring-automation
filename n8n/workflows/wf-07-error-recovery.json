@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:17:47.893Z",
+  "updatedAt": "2026-10-05T23:36:07.580Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf07ErrRecover",
   "name": "WF-07 Error & Recovery",
@@ -1174,13 +1174,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -320,
-        120
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-07 Error & Recovery\n1. **Error Trigger**: the error workflow of every NovaTech workflow. A crash is recorded in the error queue (`api.record_error`, deduplicated by fingerprint) and its run is closed as FAILED.\n2. **Every 5 minutes**: `api.claim_unalerted_errors` → one digest email to `ops.alert_email` (each error alerted once).\n3. **POST /webhook/ops/replay** (header auth, called by the backend for staff): `api.begin_error_replay` → re-run the stored payload in the original workflow → `api.resolve_error` RESOLVED or OPEN. Replays reuse the original keys and ids, so they cannot create duplicates.",
-        "width": 620,
-        "height": 300,
+        "content": "## WF-07 Error & Recovery\n\n### 1. Error Trigger\n- The error workflow of every NovaTech workflow. A crash is recorded in the error queue (`api.record_error`, deduplicated by fingerprint) and its run is closed as FAILED.\n\n### 2. Every 5 minutes\n- `api.claim_unalerted_errors` → one digest email to `ops.alert_email` (each error is alerted once).\n\n### 3. Replay\n- `POST /webhook/ops/replay` (header auth; called by the backend when staff press Replay).\n- `api.begin_error_replay` → re-run the stored payload in the original workflow → `api.resolve_error` marks it RESOLVED or keeps it OPEN.\n- Replays reuse the original keys and ids, so they cannot create duplicates.",
+        "width": 680,
+        "height": 460,
         "color": 5
       }
     }
@@ -1564,9 +1564,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "aedf1cd8-7be1-4080-8573-cdaaac0ddccf",
-  "activeVersionId": "aedf1cd8-7be1-4080-8573-cdaaac0ddccf",
-  "versionCounter": 2,
+  "versionId": "31109d2b-5785-4ee4-b5df-60879c5bcfe0",
+  "activeVersionId": "31109d2b-5785-4ee4-b5df-60879c5bcfe0",
+  "versionCounter": 3,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],

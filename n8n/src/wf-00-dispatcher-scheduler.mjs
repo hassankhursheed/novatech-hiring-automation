@@ -1,11 +1,12 @@
 // WF-00 Dispatcher & Scheduler: claims due rows of ops.scheduled_actions (outbox + durable timers) and runs the
 // owning workflow for each one.
-import { Workflow, x, sticky, execTrigger, schedule, webhook, pg, set, exec, route, splitOut } from './lib.mjs';
+import { Workflow, x, addNotes, execTrigger, schedule, webhook, pg, set, exec, route, splitOut } from './lib.mjs';
 
 // Routing table: action type -> owning workflow. Adding an action type = one line here + its handler branch.
 export const ROUTES = {
   SCREEN_APPLICATION: 'WF-03',
   SEND_REJECTION_NOTICE: 'WF-02',
+  NOTIFY_CANDIDATE: 'WF-02',
   INVITE_TO_INTERVIEW: 'WF-04',
   INTERVIEW_INVITE_REMINDER: 'WF-04',
   INTERVIEW_INVITE_EXPIRY: 'WF-04',
@@ -64,7 +65,7 @@ export default function build() {
     queryReplacement: x('(() => { const a = $("Loop Actions").first().json; const failedHard = $json.error !== undefined; const outcome = failedHard ? "FAILED" : ($json.action_outcome || "DONE"); const reason = failedHard ? String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "sub-workflow failed") : ($json.action_reason || ""); return [ a.id, outcome, JSON.stringify({ reason, handler: $prevNode.name }), outcome === "FAILED" ? reason : "", JSON.stringify({ ...$("Build Context").first().json.ctx, correlation_id: a.correlation_id, retry_count: a.attempts }) ]; })()'),
   };
 
-  const labels = { 'WF-02': 'Run WF-02 Rejection Notice', 'WF-03': 'Run WF-03 Screening', 'WF-04': 'Run WF-04 Interviews',
+  const labels = { 'WF-02': 'Run WF-02 Candidate Emails', 'WF-03': 'Run WF-03 Screening', 'WF-04': 'Run WF-04 Interviews',
     'WF-05': 'Run WF-05 Offers', 'WF-06': 'Run WF-06 Onboarding', 'WF-08': 'Run WF-08 Review Alerts' };
   targets.forEach((target, i) => {
     const inputs = target === 'WF-02'
@@ -82,6 +83,6 @@ export default function build() {
   w.connect('No Handler Registered', 'Complete Action');
   w.connect('Complete Action', 'Loop Actions');
 
-  w.add(sticky('Overview', '## WF-00 Dispatcher & Scheduler (durable timers + transactional outbox)\nEvery status change enqueues its follow-up in `ops.scheduled_actions` in the same DB transaction; reminders and expiries are rows with a future `run_at`.\nThis workflow claims due rows with `FOR UPDATE SKIP LOCKED` (overlapping runs are safe), routes each one to its owning workflow (routing table in **Route by Action Type**) and records DONE / SKIPPED / FAILED.\nFAILED is retried with exponential backoff (30 s up to 1 h); after max attempts it lands in the error queue.\nTriggers: every minute (safety net), **Kick Webhook** `POST /webhook/ops/kick` (backend, after a person acts) and **When Kicked by Workflow**.', { width: 620, height: 300, color: 4 }));
+  addNotes(w, 'WF-00');
   return w.toJSON();
 }

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:18:00.377Z",
+  "updatedAt": "2026-10-05T23:36:45.243Z",
   "createdAt": "2026-10-01T20:11:16.857Z",
   "id": "kyyh3d0dVadoBjAF",
   "name": "WF-00 Dispatcher & Scheduler",
@@ -245,8 +245,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "552fe9bc-5457-52e0-ae7e-22d7ff045b3f",
-                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "id": "ef216b66-dfa2-57aa-ad5e-f79d3a49d17c",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"NOTIFY_CANDIDATE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -269,8 +269,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "d4df50b5-d2e4-5a79-a249-e94648b8f1c8",
-                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "id": "c24126fa-84c9-5282-a43b-3e6fa58789c9",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"NOTIFY_CANDIDATE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -293,8 +293,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "5b6ea01a-bc48-5e83-a2f7-c6e423860a6f",
-                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "id": "a20d0d64-8bf0-508b-a260-5e303476d7a8",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"NOTIFY_CANDIDATE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -317,8 +317,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "17a0f655-e05e-5d46-acfd-544fa5952783",
-                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "id": "08b565b3-7089-5704-aa0e-8c903513b7b5",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"NOTIFY_CANDIDATE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -341,8 +341,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "298629c7-f140-5cde-a8cd-0be008e42a77",
-                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "id": "92518236-c042-5b1f-adc6-9a2b726d37e9",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"NOTIFY_CANDIDATE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -365,8 +365,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "ef5f5fad-0787-5fb8-ae72-50dfb8f204c5",
-                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
+                    "id": "cfbf9a9f-abc5-54d8-a1e7-de9397b1075b",
+                    "leftValue": "={{ ({\"SCREEN_APPLICATION\":\"WF-03\",\"SEND_REJECTION_NOTICE\":\"WF-02\",\"NOTIFY_CANDIDATE\":\"WF-02\",\"INVITE_TO_INTERVIEW\":\"WF-04\",\"INTERVIEW_INVITE_REMINDER\":\"WF-04\",\"INTERVIEW_INVITE_EXPIRY\":\"WF-04\",\"FINALIZE_INTERVIEW_BOOKING\":\"WF-04\",\"FEEDBACK_REMINDER\":\"WF-04\",\"FEEDBACK_ESCALATION\":\"WF-04\",\"EVALUATE_INTERVIEW\":\"WF-04\",\"PREPARE_OFFER\":\"WF-05\",\"REQUEST_OFFER_APPROVAL\":\"WF-05\",\"SEND_OFFER\":\"WF-05\",\"OFFER_REMINDER\":\"WF-05\",\"OFFER_FINAL_REMINDER\":\"WF-05\",\"OFFER_EXPIRY\":\"WF-05\",\"NOTIFY_NEGOTIATION\":\"WF-05\",\"NOTIFY_OFFER_CLOSED\":\"WF-05\",\"START_ONBOARDING\":\"WF-06\",\"NOTIFY_ONBOARDING_COMPLETE\":\"WF-06\",\"NOTIFY_REVIEW_QUEUE\":\"WF-08\"})[$json.action_type] || \"none\" }}",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -409,8 +409,8 @@
       }
     },
     {
-      "id": "ced57837-514e-5ffe-a07e-1487630d5ba6",
-      "name": "Run WF-02 Rejection Notice",
+      "id": "3ad072fd-e352-542b-a15d-2d513613459f",
+      "name": "Run WF-02 Candidate Emails",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
@@ -748,13 +748,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -320,
-        120
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-00 Dispatcher & Scheduler (durable timers + transactional outbox)\nEvery status change enqueues its follow-up in `ops.scheduled_actions` in the same DB transaction; reminders and expiries are rows with a future `run_at`.\nThis workflow claims due rows with `FOR UPDATE SKIP LOCKED` (overlapping runs are safe), routes each one to its owning workflow (routing table in **Route by Action Type**) and records DONE / SKIPPED / FAILED.\nFAILED is retried with exponential backoff (30 s up to 1 h); after max attempts it lands in the error queue.\nTriggers: every minute (safety net), **Kick Webhook** `POST /webhook/ops/kick` (backend, after a person acts) and **When Kicked by Workflow**.",
-        "width": 620,
-        "height": 300,
+        "content": "## WF-00 Dispatcher & Scheduler\n**Durable timers + transactional outbox.** Every status change writes its follow-up into `ops.scheduled_actions` in the same database transaction; reminders and expiries are rows with a future `run_at`.\n\n### How a run works\n1. Claim due rows with `FOR UPDATE SKIP LOCKED` (overlapping runs are safe).\n2. Route each action to its owning workflow (table in **Route by Action Type**).\n3. Record **DONE**, **SKIPPED** (state moved on) or **FAILED**.\n\n### Failures\n- FAILED is retried with exponential backoff (30 s up to 1 h).\n- After the last attempt the action lands in the error queue (WF-07, replayable).\n\n### Triggers\n- Every minute (safety net).\n- **Kick Webhook** `POST /webhook/ops/kick`: the backend calls it right after a person acts.\n- **When Kicked by Workflow**: intake and replays start it immediately.",
+        "width": 680,
+        "height": 520,
         "color": 4
       }
     }
@@ -870,7 +870,7 @@
       "main": [
         [
           {
-            "node": "Run WF-02 Rejection Notice",
+            "node": "Run WF-02 Candidate Emails",
             "type": "main",
             "index": 0
           }
@@ -919,7 +919,7 @@
         ]
       ]
     },
-    "Run WF-02 Rejection Notice": {
+    "Run WF-02 Candidate Emails": {
       "main": [
         [
           {
@@ -1030,9 +1030,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "eae3aab0-ea08-47f2-a7ae-2d312e855c67",
-  "activeVersionId": "eae3aab0-ea08-47f2-a7ae-2d312e855c67",
-  "versionCounter": 3,
+  "versionId": "c6047c96-9285-497c-9a44-41571d26de38",
+  "activeVersionId": "c6047c96-9285-497c-9a44-41571d26de38",
+  "versionCounter": 4,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],

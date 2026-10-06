@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:15:33.972Z",
+  "updatedAt": "2026-10-05T23:37:11.207Z",
   "createdAt": "2026-10-01T20:09:37.585Z",
   "id": "ebKtDTWlruup0Nbg",
   "name": "WF-03 Scoring & AI Review",
@@ -900,18 +900,20 @@
       ]
     },
     {
-      "parameters": {
-        "content": "## WF-03 Scoring & AI Review (action SCREEN_APPLICATION)\n1. Re-check state: it continues only if the application is still VALIDATED.\n2. Rule score: the backend reads the scoring rules from the DB (data-driven), then `api.record_application_score` moves it to SCORED.\n3. Advisory AI: an output that is validated, or a FALLBACK when AI is unavailable or malformed. Stored with `api.record_ai_analysis`.\n4. Decision policy: the rules decide, and AI can only add a human review. `api.apply_screening_decision` moves it to SHORTLISTED / SCREENING_REVIEW / REJECTED.\nRetryable failures return FAILED so the dispatcher retries with backoff. Permanent failures go to the error queue (replay WF-03).",
-        "color": 2
-      },
-      "id": "f27a8548-eaf3-4fd5-a7b7-72ed990d5cda",
-      "name": "Sticky Note 6f7f8e20",
+      "id": "9b7d0f4a-9ce4-5a9e-a38d-9098f24e3384",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        112,
-        304
-      ]
+        -572,
+        -8
+      ],
+      "parameters": {
+        "content": "## WF-03 Scoring & AI Review\nRuns for the action `SCREEN_APPLICATION` (application entered VALIDATED).\n\n### Steps\n1. **Re-check**: continues only if the application is still VALIDATED.\n2. **Rule score**: the backend reads the scoring rules from the database (data-driven); `api.record_application_score` moves it to SCORED.\n3. **Advisory AI** (Mistral, backend key): a validated analysis, or FALLBACK when the model is unavailable or its answer is malformed. Stored with `api.record_ai_analysis`.\n4. **Decision policy**: the rules decide and the AI can only add a human review. `api.apply_screening_decision` moves it to SHORTLISTED, SCREENING_REVIEW or REJECTED.\n\n### Failures\n- Retryable: returns FAILED, the dispatcher retries with backoff.\n- Permanent: error queue, replay target WF-03.",
+        "width": 680,
+        "height": 420,
+        "color": 5
+      }
     }
   ],
   "connections": {
@@ -1198,9 +1200,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "f93d7258-1fde-4ab6-aba5-d2ea5c69e00f",
-  "activeVersionId": "f93d7258-1fde-4ab6-aba5-d2ea5c69e00f",
-  "versionCounter": 4,
+  "versionId": "ff6ad246-c541-4bd9-ab9b-a0b6ab18f005",
+  "activeVersionId": "ff6ad246-c541-4bd9-ab9b-a0b6ab18f005",
+  "versionCounter": 5,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
