@@ -87,6 +87,21 @@ def test_login_link_is_emailed_only_for_active_staff_and_never_reveals_accounts(
     assert sent[0]["recipient"] == STAFF["email"] and "/staff/login#token=" in sent[0]["html"]
 
 
+def test_first_link_is_sent_even_right_after_the_server_started(
+    client: TestClient, n8n: FakeN8n, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    async def notify(message: dict[str, Any]) -> bool:
+        sent.append(message)
+        return True
+
+    n8n.notify = notify  # type: ignore[attr-defined]
+    monkeypatch.setattr(auth.time, "monotonic", lambda: 5.0)  # the monotonic clock starts near 0 at boot
+    client.post("/v1/auth/staff/login-link", json={"email": STAFF["email"]})
+    assert len(sent) == 1
+
+
 def test_sign_in_link_works_exactly_once_and_session_opens_staff_endpoints(client: TestClient) -> None:
     token = login_token()
     first = client.post("/v1/auth/staff/session", headers={"Authorization": f"Bearer {token}"})

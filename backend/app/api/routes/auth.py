@@ -72,7 +72,8 @@ async def request_login_link(
     if staff is None or not staff["is_active"]:
         log.info("staff_login_link_ignored", reason="unknown or inactive address")
         return {"status": GENERIC_ANSWER}
-    if now - _LAST_LINK.get(email, 0.0) < _THROTTLE_SECONDS:
+    last = _LAST_LINK.get(email)
+    if last is not None and now - last < _THROTTLE_SECONDS:  # never-sent must not look like "sent at time 0"
         log.info("staff_login_link_throttled", staff_id=staff["staff_id"])
         return {"status": GENERIC_ANSWER}
     _LAST_LINK[email] = now
