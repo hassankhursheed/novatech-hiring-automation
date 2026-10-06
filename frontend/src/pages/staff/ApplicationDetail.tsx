@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageTitle } from '../../components/layout'
+import { ScorecardForm, type ScorecardValues } from '../../components/scorecard'
 import { Alert, Button, Card, Empty, Field, Input, KeyValue, Loading, Pill, StatusBadge, Textarea, cx } from '../../components/ui'
 import { explain } from '../../lib/api'
 import { formatDate, formatDateTime, formatMoney, formatScore, formatShort, humanize } from '../../lib/format'
@@ -28,6 +29,7 @@ interface Detail {
   ai_analyses: { status: string; provider: string | null; model: string | null; technical_strength: number | null; experience_relevance: number | null; communication_indication: number | null; missing_skills: string[] | null; summary: string | null; recommendation: string | null; fallback_reason: string | null; attempts: number; created_at: string }[]
   interviews: { interview_id: string; interview_code: string; round: number; status: string; scheduled_start: string | null; interviewer: { full_name: string } }[]
   feedback: { interview_code: string; technical_skills: number; communication: number; problem_solving: number; experience: number; team_fit: number; interview_score: number; recommendation: string; comments: string }[]
+  interview_assessments: { interview_code: string; status: string; provider: string | null; model: string | null; recommendation: string | null; evidence_alignment: string | null; strengths: string[]; concerns: string[]; summary: string | null; fallback_reason: string | null; attempts: number; created_at: string }[]
   offers: { offer_id: string; offer_code: string; revision: number; status: string; monthly_salary: number; currency: string; joining_date: string; required_approval_levels: number; approvals: { level: number; decision: string }[]; next_level: number | null; candidate_message: string | null; expires_at: string | null }[]
   employee: { employee_id: string; employee_code: string; company_email: string; joining_date: string; tasks: { task_id: string; title: string; owner_role: string; due_date: string; status: string }[] } | null
   notifications: { template_key: string; recipient: string; status: string; created_at: string }[]
@@ -145,12 +147,15 @@ function Screening({ a }: { a: Detail }) {
 function Interviews({ a }: { a: Detail }) {
   const cancel = useStaffAction<{ id: string; reason: string }>((v) => `/interviews/${v.id}/cancel`, (v) => ({ reason: v.reason }))
   const noShow = useStaffAction<{ id: string }>((v) => `/interviews/${v.id}/no-show`)
+  const scorecard = useStaffAction<{ id: string; values: ScorecardValues }>((v) => `/interviews/${v.id}/feedback`, (v) => v.values)
+  const [recording, setRecording] = useState<string | null>(null)
   if (!a.interviews.length) return null
   return (
     <Card title="Interviews">
       <div className="space-y-4">
         {a.interviews.map((iv) => {
           const fb = a.feedback.find((f) => f.interview_code === iv.interview_code)
+          const ai = a.interview_assessments.find((x) => x.interview_code === iv.interview_code)
           return (
             <div key={iv.interview_id} className="rounded-lg border border-slate-200 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -164,8 +169,17 @@ function Interviews({ a }: { a: Detail }) {
                   <p className="mt-1 text-xs italic text-slate-600">“{fb.comments}”</p>
                 </div>
               )}
-              {iv.status === 'CONFIRMED' && (
-                <div className="mt-3 flex gap-2">
+              {ai && <InterviewAssessment ai={ai} />}
+              {iv.status === 'CONFIRMED' && recording === iv.interview_id && (
+                <div className="mt-4 rounded-lg bg-slate-50 p-4">
+                  <p className="mb-3 text-sm text-slate-700">Record the scorecard for <strong>{iv.interviewer.full_name}</strong>'s interview. The weighted score (30 % screening + 70 % interview) and the AI assessment run automatically after you submit.</p>
+                  <ScorecardForm busy={scorecard.isPending} error={scorecard.error}
+                    onSubmit={(values) => scorecard.mutate({ id: iv.interview_id, values }, { onSuccess: () => setRecording(null) })} />
+                </div>
+              )}
+              {iv.status === 'CONFIRMED' && recording !== iv.interview_id && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button onClick={() => setRecording(iv.interview_id)}>Record scorecard</Button>
                   <Button variant="secondary" busy={noShow.isPending} onClick={() => noShow.mutate({ id: iv.interview_id })}>Mark no-show</Button>
                   <Button variant="ghost" busy={cancel.isPending} onClick={() => {
                     const reason = window.prompt('Reason for cancelling this interview?')
@@ -177,8 +191,32 @@ function Interviews({ a }: { a: Detail }) {
           )
         })}
         {(cancel.error || noShow.error) && <Alert tone="error">{explain(cancel.error ?? noShow.error)}</Alert>}
+        {scorecard.isSuccess && <Alert tone="success">Scorecard saved. The evaluation runs in the background; refresh in a moment to see the decision.</Alert>}
       </div>
     </Card>
+  )
+}
+
+function InterviewAssessment({ ai }: { ai: Detail['interview_assessments'][number] }) {
+  return (
+    <div className="mt-3 rounded-lg bg-slate-50 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">AI interview assessment · advisory only · {ai.provider ?? 'none'} {ai.model ?? ''}</p>
+      {ai.status === 'FALLBACK' ? (
+        <p className="mt-2 text-sm text-amber-800">Not available: {ai.fallback_reason}. A person decides this case.</p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-slate-800">{ai.summary}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <Pill tone={ai.recommendation === 'REJECT' ? 'red' : ai.recommendation === 'SELECT' ? 'green' : 'amber'}>Suggests {humanize(ai.recommendation)}</Pill>
+            <Pill tone={ai.evidence_alignment === 'CONTRADICTORY' ? 'red' : ai.evidence_alignment === 'PARTIAL' ? 'amber' : 'green'}>
+              Comments {ai.evidence_alignment === 'ALIGNED' ? 'support' : ai.evidence_alignment === 'PARTIAL' ? 'partly support' : 'contradict'} the ratings
+            </Pill>
+          </div>
+          {ai.strengths.length > 0 && <p className="mt-2 text-xs text-slate-600"><span className="font-medium text-slate-700">Strengths:</span> {ai.strengths.join(' · ')}</p>}
+          {ai.concerns.length > 0 && <p className="mt-1 text-xs text-slate-600"><span className="font-medium text-slate-700">Concerns:</span> {ai.concerns.join(' · ')}</p>}
+        </>
+      )}
+    </div>
   )
 }
 
