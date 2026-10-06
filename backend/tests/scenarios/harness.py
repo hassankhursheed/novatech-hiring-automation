@@ -70,7 +70,7 @@ class Harness:
             raise SystemExit("SCENARIO_API_KEY (the stack's internal API key) must be set for the scenario runner")
         self.run = uuid.uuid4().hex[:6]
         self.http = httpx.Client(timeout=90)
-        self.db = psycopg.connect(os.environ["DATABASE_URL_OWNER_TEST"], row_factory=dict_row, autocommit=True)
+        self.db = psycopg.connect(os.environ["SCENARIO_DATABASE_URL"], row_factory=dict_row, autocommit=True)
         self.started = self.one("SELECT now() AS t")["t"]
         self._seq = 0
 

@@ -4,7 +4,6 @@ Every test runs in a rolled-back transaction. Staff ids come from db/seed/010_no
 """
 
 import json
-import os
 import uuid
 from collections.abc import Iterator
 from typing import Any
@@ -13,12 +12,9 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-pytestmark = pytest.mark.db
+from tests.integration.conftest import DatabaseUrls
 
-APP_URL = os.environ.get("DATABASE_URL_TEST")
-OWNER_URL = os.environ.get("DATABASE_URL_OWNER_TEST")
-if not APP_URL or not OWNER_URL:
-    pytest.skip("DATABASE_URL_TEST / DATABASE_URL_OWNER_TEST not set", allow_module_level=True)
+pytestmark = pytest.mark.db
 
 SYSTEM = {"actor_type": "SYSTEM", "actor_id": "pytest", "workflow_name": "WF-TEST"}
 SANA_HR = "00000000-0000-4000-8000-000000000001"
@@ -35,9 +31,9 @@ def staff(staff_id: str) -> dict[str, str]:
 
 
 @pytest.fixture
-def db() -> Iterator[Conn]:
+def db(database_urls: DatabaseUrls) -> Iterator[Conn]:
     # Owner connection: lets tests move clocks (e.g. expire an offer) inside a rolled-back transaction.
-    with psycopg.connect(OWNER_URL, row_factory=dict_row) as conn:  # type: ignore[arg-type]
+    with psycopg.connect(database_urls.owner, row_factory=dict_row) as conn:
         yield conn
         conn.rollback()
 
