@@ -94,8 +94,10 @@ the judge scored below 0.6 for a person to read. Results: `reports/ai-eval.md` a
 Without `MISTRAL_API_KEY` the suite is skipped; `AI_EVAL_PROVIDER=stub` runs it against the deterministic test model
 to check the pipeline itself.
 
-In GitHub Actions (`.github/workflows/ci.yml`) the job runs when the repository secret `MISTRAL_API_KEY` is set
-(Settings → Secrets and variables → Actions); the report is attached to the run.
+In GitHub Actions the suite has its own workflow, `.github/workflows/ai-eval.yml`: it runs when AI code or the
+datasets change, every Monday (to catch drift behind the `-latest` model aliases) and on demand (Actions → AI
+evaluation → Run workflow), because each run uses about 110 requests of the Mistral budget. It needs the repository
+secret `MISTRAL_API_KEY` (Settings → Secrets and variables → Actions); the report is attached to the run.
 
 ### Langfuse datasets and experiments
 

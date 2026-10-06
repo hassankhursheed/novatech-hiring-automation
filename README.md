@@ -69,6 +69,8 @@ docker compose --profile test run --rm backend-tests     # lint + unit + API + D
 docker compose --profile test run --rm backend-tests python -m tests.scenarios.journey   # the 7 hiring steps, live
 docker compose --profile test run --rm backend-tests deepeval test run tests/ai_eval -m ai_eval   # AI evaluation
 docker compose run --rm migrate                          # apply new migrations
+sh scripts/purge-applications.sh --dry-run               # see which test applications (example.com etc.) would be removed
+sh scripts/purge-applications.sh                         # remove them (backup first, asks to confirm); --all = clean go-live
 docker compose down                                      # stop (data is kept in volumes)
 docker compose down -v                                   # stop AND delete all data (fresh start)
 ```
@@ -84,8 +86,9 @@ db/bootstrap/       role bootstrap for managed Postgres (Supabase / Cloud SQL / 
 infra/              container init scripts (DB roles, seeding)
 n8n/workflows/      exported n8n workflows (version-controlled, no credentials)
 n8n/src/            workflow-as-code (WF-00, WF-02, WF-04..WF-09; notes for all) and the build (node n8n/src/build.mjs)
-scripts/            .env generator, n8n deploy / export, n8n Mistral key
-.github/workflows/  CI: lint, tests with testcontainers + coverage, portal build, workflow build, AI evaluation
+scripts/            .env generator, n8n deploy / export, n8n Mistral key, test-data cleanup
+db/maintenance/     purge_applications.sql (used by scripts/purge-applications)
+.github/workflows/  CI (lint, tests with testcontainers + coverage, portal and workflow builds) and the AI evaluation
 docs/               architecture, database/ERD, state machine, workflows, reliability, configuration, n8n setup
 ```
 
