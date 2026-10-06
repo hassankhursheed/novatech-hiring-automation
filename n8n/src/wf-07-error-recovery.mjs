@@ -1,6 +1,6 @@
 // WF-07 Error & Recovery: safety net for crashed executions, error-queue alerts, and operator replay.
 import {
-  Workflow, WF, x, ESC, LAYOUT, sticky, errorTrigger, schedule, webhook, respond, pg, set, exec, email, when, route, http,
+  Workflow, WF, x, ESC, LAYOUT, addNotes, errorTrigger, schedule, webhook, respond, pg, set, exec, email, when, route, http,
 } from './lib.mjs';
 
 export default function build() {
@@ -128,6 +128,6 @@ export default function build() {
   w.add(respond('Respond Resolve Failed', 500, '({ code: "RESOLVE_FAILED", detail: String($json.message ?? $json.error?.message ?? (typeof $json.error === "string" ? $json.error : $json.error?.description) ?? "could not record the replay result") })'));
   w.connect('Resolve Error', 'Respond Resolve Failed', 1);
 
-  w.add(sticky('Overview', '## WF-07 Error & Recovery\n1. **Error Trigger**: the error workflow of every NovaTech workflow. A crash is recorded in the error queue (`api.record_error`, deduplicated by fingerprint) and its run is closed as FAILED.\n2. **Every 5 minutes**: `api.claim_unalerted_errors` → one digest email to `ops.alert_email` (each error alerted once).\n3. **POST /webhook/ops/replay** (header auth, called by the backend for staff): `api.begin_error_replay` → re-run the stored payload in the original workflow → `api.resolve_error` RESOLVED or OPEN. Replays reuse the original keys and ids, so they cannot create duplicates.', { width: 620, height: 300 }));
+  addNotes(w, 'WF-07');
   return w.toJSON({ errorWorkflow: false });
 }

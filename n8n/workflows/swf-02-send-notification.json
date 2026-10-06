@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:14:26.232Z",
+  "updatedAt": "2026-10-05T23:36:24.366Z",
   "createdAt": "2026-10-01T19:55:17.607Z",
   "id": "zNrGlzM4KLrFVMAo",
   "name": "SWF-02 Send Notification",
@@ -75,7 +75,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM api.begin_notification($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8::jsonb)",
+        "query": "SELECT b.*,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.name') AS sender_name,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.careers_email') AS sender_email\n  FROM api.begin_notification($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8::jsonb) AS b",
         "options": {
           "queryReplacement": "={{ [ $json.dedupe_key, $json.channel || \"EMAIL\", $json.template_key, $json.recipient, $json.application_id || \"\", $json.entity_type || \"SYSTEM\", $json.entity_id || \"\", JSON.stringify($json.ctx) ] }}"
         }
@@ -172,7 +172,7 @@
       ],
       "parameters": {
         "operation": "send",
-        "fromEmail": "NovaTech Careers <careers@novatech.example>",
+        "fromEmail": "={{ ($(\"Claim Notification\").item.json.sender_name || \"NovaTech\") + \" Careers <\" + $(\"Claim Notification\").item.json.sender_email + \">\" }}",
         "toEmail": "={{ $(\"When Called by Workflow\").item.json.recipient }}",
         "subject": "={{ $(\"When Called by Workflow\").item.json.subject }}",
         "emailFormat": "html",
@@ -184,7 +184,7 @@
       "credentials": {
         "smtp": {
           "id": "ntMailpitSmtp001",
-          "name": "Mailpit SMTP (dev)"
+          "name": "NovaTech SMTP (outgoing email)"
         }
       },
       "retryOnFail": true,
@@ -293,17 +293,35 @@
       }
     },
     {
-      "id": "ec4a2004-9c73-45f3-80bd-1fbe8e429339",
-      "name": "Sticky Note 48e4db1b",
+      "id": "b85f6506-b110-5f21-a4f1-89d15caf4c50",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        100,
-        300
+        -540,
+        -80
       ],
       "parameters": {
-        "content": "## SWF-02 Send Notification (at most once)\n`api.begin_notification` claims the dedupe key first. If a replay already sent this message, nothing is sent again.\nOnly this sub-workflow knows the provider: swap Mailpit/SMTP for Gmail, Outlook or SES per company without touching other workflows.",
-        "color": 4
+        "content": "## SWF-02 Send Notification (at most once)\n- `api.begin_notification` claims the dedupe key first; if a replay already sent this message, nothing is sent again.\n- The sender is **<company.name> Careers** with the address in the setting `company.careers_email`.\n- Only this sub-workflow knows the mail provider: change the SMTP credential and every workflow follows.",
+        "width": 680,
+        "height": 240,
+        "color": 5
+      }
+    },
+    {
+      "id": "05d0eb5e-99cd-5657-a3ce-2c2f34f78a7a",
+      "name": "Setup Required",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -540,
+        200
+      ],
+      "parameters": {
+        "content": "## Setup: outgoing email (SMTP)\nThe node **Send Email** uses the credential **NovaTech SMTP (outgoing email)**. Out of the box it points at Mailpit, the local test inbox (http://localhost:8025): nothing reaches real inboxes.\n\n### To send real email with Gmail\n1. In your Google account turn on **2-Step Verification**, then create an **App password** (Security → App passwords).\n2. n8n → **Credentials** → **NovaTech SMTP (outgoing email)**:\n- **User**: your Gmail address\n- **Password**: the 16-character app password\n- **Host**: `smtp.gmail.com`, **Port**: `465`, **SSL/TLS**: on\n3. Set `MAIL_FROM_ADDRESS` in `.env` to the same Gmail address and run `docker compose up -d seed` (updates `company.careers_email`).\n\nAny other provider (Outlook, SES, Brevo, ...) works the same way with its SMTP host, port and login.",
+        "width": 680,
+        "height": 460,
+        "color": 3
       }
     }
   ],
@@ -398,9 +416,9 @@
   },
   "nodeGroups": [],
   "pinData": null,
-  "versionId": "c396c029-1411-4b06-9329-cfe4e738a7b1",
-  "activeVersionId": "c396c029-1411-4b06-9329-cfe4e738a7b1",
-  "versionCounter": 3,
+  "versionId": "8e61fc35-6f83-4e47-af75-d6fc15b2e0a0",
+  "activeVersionId": "8e61fc35-6f83-4e47-af75-d6fc15b2e0a0",
+  "versionCounter": 4,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

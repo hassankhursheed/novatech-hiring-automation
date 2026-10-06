@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:14:40.019Z",
+  "updatedAt": "2026-10-05T23:36:36.106Z",
   "createdAt": "2026-10-01T19:53:40.534Z",
   "id": "IBNva3yYim0EcUCT",
   "name": "SWF-03 Fail & Record Error",
@@ -109,17 +109,19 @@
       }
     },
     {
-      "id": "547da8d0-4928-430e-b130-6a7b3066e43f",
-      "name": "Sticky Note ae7483a2",
+      "id": "2e226710-87da-55ca-a397-ba10a9cf09df",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        100,
-        300
+        -540,
+        180
       ],
       "parameters": {
-        "content": "## SWF-03 Fail & Record Error\nCalled by any workflow on an unrecoverable failure.\n1. `api.record_error` stores the error with the original payload and replay target (deduplicated by fingerprint).\n2. `api.finish_workflow_execution` marks the caller execution FAILED.\nOperators see it in `reporting.v_error_queue` and replay it through WF-07.",
-        "color": 3
+        "content": "## SWF-03 Fail & Record Error\nCalled by any workflow on an unrecoverable failure.\n1. `api.record_error` stores the error with the original payload and the replay target (deduplicated by fingerprint).\n2. `api.finish_workflow_execution` marks the calling execution FAILED.\n\nOperators see it in the HR portal (**Automation errors**, from `reporting.v_error_queue`) and replay it through WF-07.",
+        "width": 680,
+        "height": 260,
+        "color": 5
       }
     }
   ],
@@ -171,9 +173,9 @@
   },
   "nodeGroups": [],
   "pinData": null,
-  "versionId": "18293d59-2dc7-4b37-87ce-b6cba4abfabf",
-  "activeVersionId": "18293d59-2dc7-4b37-87ce-b6cba4abfabf",
-  "versionCounter": 2,
+  "versionId": "281528db-6bd2-4bcb-92aa-a4920f347ea7",
+  "activeVersionId": "281528db-6bd2-4bcb-92aa-a4920f347ea7",
+  "versionCounter": 3,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

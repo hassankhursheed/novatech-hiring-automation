@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:18:18.409Z",
+  "updatedAt": "2026-10-05T23:37:29.311Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf05OfferMgmt1",
   "name": "WF-05 Offer Management",
@@ -2636,13 +2636,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -320,
-        120
+        -540,
+        200
       ],
       "parameters": {
-        "content": "## WF-05 Offer Management\nCalled by **WF-00** for offer actions; every branch re-checks the offer/application state first.\n- **Draft** (`api.create_offer`): salary from the expected salary clamped to the band; above `offer.second_approval_threshold` two approval levels are required. After an approver rejection the system never re-drafts; HR is asked to revise.\n- **Approval**: a signed link to the reporting manager (if eligible) or the first eligible approver. Level 1 before level 2, never the same person, never the creator (enforced by the database).\n- **Send**: backend renders the PDF → `api.mark_offer_sent` (schedules reminders + expiry) → signed response link → email.\n- **Reminders / expiry / negotiation / closure** notify the candidate and HR. A response cancels the timers.",
-        "width": 620,
-        "height": 340,
+        "content": "## WF-05 Offer Management\nCalled by **WF-00** for offer actions; every branch re-checks the offer and application state first.\n\n### Draft (`api.create_offer`)\n- Salary: the expected salary, clamped to the position band.\n- Above `offer.second_approval_threshold` two approval levels are required.\n- After an approver rejection the system never re-drafts on its own; HR is asked to revise.\n\n### Approval\n- Signed link to the reporting manager (if eligible) or the first eligible approver.\n- Level 1 before level 2, never the same person twice, never the offer creator (enforced by the database).\n\n### Send\n- The backend renders the offer letter PDF → `api.mark_offer_sent` (schedules reminders and expiry) → signed response link → email.\n\n### Afterwards\n- Reminders, expiry, negotiation and closure notify the candidate and HR. A response cancels the timers.",
+        "width": 680,
+        "height": 600,
         "color": 5
       }
     }
@@ -3267,9 +3267,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "f5ba0a0d-0c24-454e-97d6-7386bb7d748a",
-  "activeVersionId": "f5ba0a0d-0c24-454e-97d6-7386bb7d748a",
-  "versionCounter": 2,
+  "versionId": "2c30fefd-a1fd-4677-9d9a-23ff1a371662",
+  "activeVersionId": "2c30fefd-a1fd-4677-9d9a-23ff1a371662",
+  "versionCounter": 3,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

@@ -1,6 +1,6 @@
 // WF-05 Offer Management: draft, approval requests, offer letter + send, reminders, expiry, negotiation and closure.
 import {
-  Workflow, x, ESC, LAYOUT, FMT, sticky, execTrigger, pg, set, email, when, route,
+  Workflow, x, ESC, LAYOUT, FMT, addNotes, execTrigger, pg, set, email, when, route,
   handlerContext, addHandlerTail, addBackendStep,
 } from './lib.mjs';
 
@@ -211,6 +211,6 @@ export default function build() {
   w.connect('Route by Action Type', 'Result: Unknown Action', 8);
   w.connect('Result: Unknown Action', tail.finish);
 
-  w.add(sticky('Overview', '## WF-05 Offer Management\nCalled by **WF-00** for offer actions; every branch re-checks the offer/application state first.\n- **Draft** (`api.create_offer`): salary from the expected salary clamped to the band; above `offer.second_approval_threshold` two approval levels are required. After an approver rejection the system never re-drafts; HR is asked to revise.\n- **Approval**: a signed link to the reporting manager (if eligible) or the first eligible approver. Level 1 before level 2, never the same person, never the creator (enforced by the database).\n- **Send**: backend renders the PDF → `api.mark_offer_sent` (schedules reminders + expiry) → signed response link → email.\n- **Reminders / expiry / negotiation / closure** notify the candidate and HR. A response cancels the timers.', { width: 620, height: 340 }));
+  addNotes(w, 'WF-05');
   return w.toJSON();
 }

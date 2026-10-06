@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-02T19:14:12.092Z",
+  "updatedAt": "2026-10-05T23:36:16.110Z",
   "createdAt": "2026-10-01T19:59:21.036Z",
   "id": "aIsZuTp9Z6s1IqLi",
   "name": "SWF-01 Backend Call",
@@ -916,18 +916,20 @@
       ]
     },
     {
-      "parameters": {
-        "content": "## SWF-01 Backend Call (classified retry + backoff)\nThe only place that knows the backend URL and API key.\n- 2xx: return the result.\n- `retryable: true`, 429, 408, 5xx or a network error: retry after 2s, then 4s (3 attempts maximum). Each retry is logged as RETRY_ATTEMPT, and a success after a retry as RETRY_RECOVERED.\n- Any other 4xx: no retry.\nIt never throws. The caller gets `{ ok, status, body, attempts, error_class, error_code, error_message }` and decides between a fallback and the error queue (SWF-03).\n`X-Attempt` and `X-Fault-Inject` drive the deterministic failure demos.",
-        "color": 5
-      },
-      "id": "d4a6513f-ca63-41e1-b283-5b7cab434112",
-      "name": "Sticky Note 7af9cfb8",
+      "id": "67767f03-267e-5ba3-a42e-e76732ad41ad",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        112,
-        304
-      ]
+        -572,
+        168
+      ],
+      "parameters": {
+        "content": "## SWF-01 Backend Call\nThe only place that knows the backend URL and API key (credential **NovaTech Backend API key**).\n\n### Retry policy\n- **2xx**: return the result.\n- `retryable: true`, 429, 408, 5xx or a network error: retry after 2 s, then 4 s (3 attempts). Each retry is logged as RETRY_ATTEMPT, a later success as RETRY_RECOVERED.\n- Any other 4xx: no retry.\n\n### Contract\n- Never throws. The caller gets `{ ok, status, body, attempts, error_class, error_code, error_message }` and chooses between a fallback and the error queue (SWF-03).\n- `X-Attempt` and `X-Fault-Inject` drive the deterministic failure demos.",
+        "width": 680,
+        "height": 420,
+        "color": 5
+      }
     }
   ],
   "connections": {
@@ -1168,9 +1170,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "598a5bc4-0e52-4ff8-996f-63c5164de572",
-  "activeVersionId": "598a5bc4-0e52-4ff8-996f-63c5164de572",
-  "versionCounter": 4,
+  "versionId": "32bb40d7-1e66-4241-baa7-c0f7854298d2",
+  "activeVersionId": "32bb40d7-1e66-4241-baa7-c0f7854298d2",
+  "versionCounter": 5,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

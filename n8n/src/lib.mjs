@@ -4,10 +4,13 @@
 // n8n workflow JSON (n8n/build/), which scripts/n8n-deploy imports and publishes. Node ids are derived from the
 // workflow id and node name, so rebuilding a workflow updates it in place instead of creating new nodes.
 import { createHash } from 'node:crypto';
+import { NOTES } from './notes.mjs';
 
 export const CRED = {
   pg: { postgres: { id: 'ntPostgresApp001', name: 'NovaTech DB (n8n_app)' } },
   apiKey: { httpHeaderAuth: { id: 'ntBackendApiKey1', name: 'NovaTech Backend API key' } },
+  // n8n's own Mistral key (the backend uses a separate one). Paste the key into this credential in n8n.
+  mistral: { mistralCloudApi: { id: 'ntMistralCloud01', name: 'Mistral AI (n8n)' } },
 };
 
 // Fixed ids, so workflows can call each other and the error workflow setting survives re-imports.
@@ -85,6 +88,14 @@ export class Workflow {
     outputs[output].push({ node: to, type: 'main', index: input });
   }
 
+  /** Connects an AI sub-node (model, output parser, ...) to the root node that uses it. */
+  connectAi(from, to, type = 'ai_languageModel') {
+    for (const name of [from, to]) {
+      if (!this.nodes.some((n) => n.name === name)) throw new Error(`${this.key}: unknown node ${name}`);
+    }
+    (this.connections[from] ??= {})[type] = [[{ node: to, type, index: 0 }]];
+  }
+
   /** chain(a, b, c) connects a->b->c through output 0. */
   chain(...names) {
     for (let i = 0; i < names.length - 1; i++) this.connect(names[i], names[i + 1]);
@@ -95,10 +106,11 @@ export class Workflow {
   layout() {
     const incoming = new Map(this.nodes.map((n) => [n.name, 0]));
     for (const outs of Object.values(this.connections)) {
-      for (const list of outs.main) for (const c of list) incoming.set(c.node, incoming.get(c.node) + 1);
+      for (const list of outs.main || []) for (const c of list) incoming.set(c.node, incoming.get(c.node) + 1);
     }
     const depth = new Map();
-    const queue = this.nodes.filter((n) => incoming.get(n.name) === 0 && !n.type.endsWith('stickyNote')).map((n) => n.name);
+    const isSub = (n) => Object.keys(this.connections[n.name] || {}).some((k) => k.startsWith('ai_'));
+    const queue = this.nodes.filter((n) => incoming.get(n.name) === 0 && !n.type.endsWith('stickyNote') && !isSub(n)).map((n) => n.name);
     queue.forEach((n) => depth.set(n, 0));
     for (let guard = 0; queue.length && guard < 10000; guard++) {
       const name = queue.shift();
@@ -114,16 +126,22 @@ export class Workflow {
     }
     const rows = new Map();
     for (const n of this.nodes) {
-      if (n.type.endsWith('stickyNote')) continue;
+      if (n.type.endsWith('stickyNote') || isSub(n)) continue;
       const d = depth.get(n.name) ?? 0;
       const row = rows.get(d) ?? 0;
       rows.set(d, row + 1);
       n.position = [240 + d * 260, 320 + row * 200];
     }
+    // AI sub-nodes sit under the node they serve.
+    for (const n of this.nodes.filter(isSub)) {
+      const parent = this.nodes.find((p) => p.name === Object.values(this.connections[n.name])[0][0][0].node);
+      n.position = [parent.position[0], parent.position[1] + 180];
+    }
   }
 
   toJSON({ errorWorkflow = true, timezone } = {}) {
     this.layout();
+    fitStickies(this.nodes);
     const settings = { executionOrder: 'v1', availableInMCP: true, callerPolicy: 'workflowsFromSameOwner' };
     if (errorWorkflow) settings.errorWorkflow = WF['WF-07'][0];
     if (timezone) settings.timezone = timezone;
@@ -142,8 +160,78 @@ export class Workflow {
   }
 }
 
+// ---- sticky notes ----------------------------------------------------------------------------------
+// n8n renders sticky notes as Markdown at a fixed size: text that does not fit is cut off. The height is therefore
+// computed from the content (wrapped at the note width), so every note shows its full text.
+const STICKY_FONT = { body: 7.4, heading: { 1: 13, 2: 11.2, 3: 9.6 } }; // average character width in px
+const STICKY_LINE = { body: 22, heading: { 1: 40, 2: 34, 3: 28 }, blank: 12 };
+
+export function stickyHeight(content, width) {
+  const inner = width - 40; // horizontal padding
+  let height = 56; // top + bottom padding
+  for (const raw of String(content).split('\n')) {
+    const line = raw.replace(/\*\*|`|\[|\]\([^)]*\)/g, '');
+    if (!line.trim()) { height += STICKY_LINE.blank; continue; }
+    const heading = /^(#{1,3})\s/.exec(line);
+    if (heading) {
+      const level = heading[1].length;
+      const perLine = Math.max(10, Math.floor(inner / STICKY_FONT.heading[level]));
+      height += STICKY_LINE.heading[level] * Math.ceil((line.length - level - 1) / perLine);
+      continue;
+    }
+    const indent = /^\s*([-*]|\d+\.)\s/.test(line) ? 24 : 0;
+    const perLine = Math.max(10, Math.floor((inner - indent) / STICKY_FONT.body));
+    height += STICKY_LINE.body * Math.ceil(line.trim().length / perLine);
+  }
+  return Math.ceil((height * 1.06) / 20) * 20; // small safety margin, snapped to n8n's 20 px grid
+}
+
+/** Sizes every sticky note so its whole text is visible (never smaller than the size it was given). */
+export function fitStickies(nodes) {
+  const stickies = nodes.filter((n) => n.type.endsWith('stickyNote'));
+  for (const n of stickies) {
+    const p = n.parameters;
+    p.width = Math.max(p.width || 520, 360);
+    p.height = Math.max(stickyHeight(p.content || '', p.width), 160);
+  }
+  // Notes stand in a column left of the first node, top-aligned with the flow, so they never cover a node.
+  const flow = nodes.filter((n) => !n.type.endsWith('stickyNote'));
+  if (flow.length) {
+    const left = Math.min(...flow.map((n) => n.position[0]));
+    let top = Math.min(...flow.map((n) => n.position[1])) - 120;
+    for (const n of stickies) {
+      n.position = [left - n.parameters.width - 100, top];
+      top += n.parameters.height + 40;
+    }
+  }
+  return nodes;
+}
+
+/** Adds the documented notes of a workflow (notes.mjs): the overview, plus a setup note where one exists. */
+export function addNotes(w, key) {
+  for (const [suffix, name] of [['', 'Overview'], ['-setup', 'Setup Required']]) {
+    const note = NOTES[key + suffix];
+    if (note) w.add(sticky(name, note[0], { width: 680, color: note[1] }));
+  }
+}
+
+/** Replaces the notes of an exported (JSON-defined) workflow with the documented ones and sizes them. */
+export function renoteExported(wf, key) {
+  wf.nodes = wf.nodes.filter((n) => !n.type.endsWith('stickyNote'));
+  for (const [suffix, name] of [['', 'Overview'], ['-setup', 'Setup Required']]) {
+    const note = NOTES[key + suffix];
+    if (!note) continue;
+    wf.nodes.push({
+      id: uuidFrom(`${wf.id}:${name}`), name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, position: [0, 0],
+      parameters: { content: note[0], width: 680, height: 160, color: note[1] },
+    });
+  }
+  fitStickies(wf.nodes);
+  return wf;
+}
+
 // ---- node factories ---------------------------------------------------------------------------------
-export const sticky = (name, content, { width = 520, height = 260, color = 5, position = [-320, 120] } = {}) => ({
+export const sticky = (name, content, { width = 560, height = 160, color = 5, position = [-320, 120] } = {}) => ({
   name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, position, parameters: { content, width, height, color },
 });
 

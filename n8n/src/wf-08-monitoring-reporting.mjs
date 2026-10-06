@@ -1,6 +1,6 @@
 // WF-08 Monitoring & Reporting: daily management report (numbers from SQL only) and review-queue alerts.
 import {
-  Workflow, x, ESC, LAYOUT, sticky, execTrigger, schedule, webhook, pg, set, exec, email, iff, cond, when, route,
+  Workflow, x, ESC, LAYOUT, addNotes, execTrigger, schedule, webhook, pg, set, exec, email, iff, cond, when, route,
 } from './lib.mjs';
 
 export default function build() {
@@ -128,6 +128,6 @@ SELECT d.report_date::text AS report_date,
   ]));
   w.connect('Route by Action Type', 'Unknown Action', 2);
 
-  w.add(sticky('Overview', '## WF-08 Monitoring & Reporting\n**Daily report** (09:00 company time; on demand: `POST /webhook/ops/daily-report` with header auth and `{"report_date": "YYYY-MM-DD", "force": false}`): every number comes from `reporting.daily_metrics`. The backend writes the prose and rejects AI text that contains any number not in the metrics. One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).\n**Review alerts**: WF-00 action `NOTIFY_REVIEW_QUEUE` emails recruiters (screening review) or the hiring manager (interview review) after re-checking that the case still needs a person.', { width: 620, height: 300 }));
+  addNotes(w, 'WF-08');
   return w.toJSON({ timezone: 'Asia/Karachi' });
 }
