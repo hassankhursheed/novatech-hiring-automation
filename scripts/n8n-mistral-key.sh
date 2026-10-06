@@ -1,23 +1,18 @@
 #!/bin/sh
-# Puts the Mistral API key from .env into the n8n credential "Mistral AI (n8n)" (used by WF-04 for the
-# interviewer's suggested questions). The key never appears in output or in the repository.
+# Puts n8n's own Mistral key (N8N_MISTRAL_API_KEY in .env) into the n8n credential "Mistral AI (n8n)", used by WF-04
+# for the interviewer's suggested questions. The key never appears in output or in the repository.
 #
 #   sh scripts/n8n-mistral-key.sh
 #
-# Uses N8N_MISTRAL_API_KEY (a separate key for n8n, recommended) and falls back to MISTRAL_API_KEY.
+# n8n only ever uses N8N_MISTRAL_API_KEY; the backend's MISTRAL_API_KEY is never copied into n8n.
 # Alternative without this script: n8n -> Credentials -> "Mistral AI (n8n)" -> paste the key -> Save.
 set -eu
 export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")/.."
 
-value() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
-key="$(value N8N_MISTRAL_API_KEY)"
-source_name=N8N_MISTRAL_API_KEY
-if [ -z "$key" ]; then
-  key="$(value MISTRAL_API_KEY)"
-  source_name="MISTRAL_API_KEY (no N8N_MISTRAL_API_KEY set)"
-fi
-[ -n "$key" ] || { echo "No Mistral key in .env (N8N_MISTRAL_API_KEY or MISTRAL_API_KEY)." >&2; exit 1; }
+key=$(grep -E "^N8N_MISTRAL_API_KEY=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' \
+  | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")
+[ -n "$key" ] || { echo "N8N_MISTRAL_API_KEY is empty in .env: paste n8n's Mistral key there first." >&2; exit 1; }
 
 project=$(docker compose exec -T n8n-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT id FROM project WHERE type = '"'"'personal'"'"' ORDER BY \"createdAt\" LIMIT 1"' | tr -d '\r')
 [ -n "$project" ] || { echo "No n8n owner account yet: open http://localhost:5678 and create it first." >&2; exit 1; }
@@ -31,4 +26,4 @@ printf '%s' "$key" | docker compose exec -T n8n sh -c '
   status=$?
   rm -f /tmp/nt-mistral.json
   exit $status'
-echo "n8n credential \"Mistral AI (n8n)\" updated from $source_name."
+echo "n8n credential \"Mistral AI (n8n)\" now uses N8N_MISTRAL_API_KEY."

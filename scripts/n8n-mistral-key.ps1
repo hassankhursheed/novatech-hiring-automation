@@ -1,4 +1,4 @@
-# Windows wrapper: puts the Mistral key from .env into the n8n credential "Mistral AI (n8n)".
+# Windows wrapper: puts N8N_MISTRAL_API_KEY (n8n's own key) from .env into the n8n credential "Mistral AI (n8n)".
 #   powershell -ExecutionPolicy Bypass -File scripts\n8n-mistral-key.ps1
 $ErrorActionPreference = 'Stop'
 $bash = 'C:\Program Files\Git\bin\bash.exe'

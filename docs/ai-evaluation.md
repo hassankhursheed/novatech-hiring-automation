@@ -11,7 +11,7 @@ reject on its own. This page covers which model is used, how every call is trace
 | Screening analysis (fit scores, missing skills, summary, SHORTLIST/REVIEW/REJECT advice) | backend `POST /v1/screening/ai-analysis`, called by WF-03 | `ministral-14b-latest` | `MISTRAL_API_KEY` in `.env` |
 | Interview assessment (reads ratings + comments + screening; SELECT/REVIEW/REJECT advice; do the comments support the ratings?) | backend `POST /v1/interviews/ai-assessment`, called by WF-04 | `ministral-14b-latest` | `MISTRAL_API_KEY` |
 | Daily report prose (numbers come from SQL; text with any other number is rejected) | backend `POST /v1/reports/daily-summary`, called by WF-08 | `ministral-14b-latest` | `MISTRAL_API_KEY` |
-| Suggested interview questions in the interviewer brief | n8n WF-04 (Basic LLM Chain + Mistral Cloud Chat Model) | `ministral-8b-latest` | n8n credential `Mistral AI (n8n)` |
+| Suggested interview questions in the interviewer brief | n8n WF-04 (Basic LLM Chain + Mistral Cloud Chat Model) | `ministral-8b-latest` | `N8N_MISTRAL_API_KEY` → n8n credential `Mistral AI (n8n)` |
 
 Every backend call: names and contact details removed before sending, a versioned prompt
 (`candidate-analysis/v2`, `interview-assessment/v2`), Mistral's native JSON-schema output, validation by our own
@@ -25,7 +25,7 @@ A free (Experiment) Mistral key can call only some models. Measured on this proj
 | Model | Free-key limit | Used for |
 |---|---|---|
 | `ministral-14b-latest` | 30 requests/min | backend (the strongest model the free key allows) |
-| `ministral-8b-latest` | 188 requests/min | n8n interview questions |
+| `ministral-8b-latest` | 188 requests/min | n8n interview questions (n8n's own key; a separate per-model budget from the backend's) |
 | `ministral-3b-latest` | 750 requests/min | not used (too small for assessments) |
 | `mistral-medium-latest`, `mistral-small-latest`, `magistral-*` | 0 (blocked on the free tier) | use with a paid key |
 

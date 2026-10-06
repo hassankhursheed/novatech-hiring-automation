@@ -95,11 +95,11 @@ export const NOTES = {
 
   'WF-04-setup': [lines(
     '## Setup: Mistral credential',
-    'The node **Mistral Chat Model** uses the n8n credential **Mistral AI (n8n)**.',
-    '1. Open **Credentials** (left sidebar) → **Mistral AI (n8n)**.',
-    '2. Paste your Mistral API key into **API Key** → **Save**.',
+    'The node **Mistral Chat Model** uses the n8n credential **Mistral AI (n8n)**, with n8n\'s own key (not the backend key).',
+    '1. Put the key in `.env` as `N8N_MISTRAL_API_KEY`.',
+    '2. Run `sh scripts/n8n-mistral-key.sh` (Windows: `scripts\\n8n-mistral-key.ps1`). Or: **Credentials** → **Mistral AI (n8n)** → paste the key → **Save**.',
     '',
-    'Model: `mistral-small-latest` (fast, available on the free tier). Without a key the interviewer brief is still sent, just without the suggested questions.',
+    'Model: `ministral-8b-latest`. Mistral limits apply per workspace and per model; the backend uses `ministral-14b`, so this model has its own budget (188 requests/min on a free key). Without a key the interviewer brief is still sent, just without the suggested questions.',
   ), 3],
 
   'WF-05': [lines(
