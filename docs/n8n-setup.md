@@ -1,7 +1,18 @@
 # n8n setup (local)
 
-n8n **2.40.7** runs in Docker with its own PostgreSQL database and an external task runner (the production
-setup recommended for n8n 2.x). Everything starts with `docker compose up -d`.
+n8n **2.41.7** (latest stable) runs in Docker with its own PostgreSQL database and an external task runner (the
+production setup recommended for n8n 2.x). Everything starts with `docker compose up -d`.
+
+**Updating n8n.** Set `N8N_VERSION` in `.env` to the new stable version (Docker Hub tag `n8nio/n8n:stable`; read the
+release notes for breaking changes first), back up the n8n database, then pull and restart:
+
+```bash
+docker compose exec -T n8n-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --file=/tmp/n8n.dump'
+docker compose cp n8n-db:/tmp/n8n.dump backups/n8n-db-before-update.dump
+docker compose pull n8n n8n-runners && docker compose up -d n8n n8n-runners
+```
+
+n8n migrates its own database on start; check `docker compose logs n8n` and that every workflow is still active.
 
 ## 1. First login (owner account)
 
@@ -14,16 +25,41 @@ setup recommended for n8n 2.x). Everything starts with `docker compose up -d`.
 > Back up `N8N_ENCRYPTION_KEY` from `.env`. It encrypts every credential you save in n8n. Without it,
 > a restored database cannot decrypt them.
 
-## 2. Credentials to create
+## 2. Credentials
 
-Create these in *Credentials → Add credential*. Names matter: the exported workflows reference credentials by name.
+The workflows use four credentials. Names matter: the exported workflows reference them by id and name.
 
-| Credential name | Type | Values |
-|---|---|---|
-| `NovaTech DB (n8n_app)` | Postgres | Host `db` · Port `5432` · Database `novatech` · User `n8n_app` · Password = `NOVATECH_N8N_DB_PASSWORD` from `.env` · SSL `disable` (local only) |
-| `NovaTech Backend API key` | Header Auth | Name `X-API-Key` · Value = the first key in `INTERNAL_API_KEYS` from `.env` |
-| `Mailpit SMTP (dev)` | SMTP | Host `mailpit` · Port `1025` · User/password: anything · SSL/TLS off |
-| `NovaTech Telegram bot` (optional) | Telegram API | Bot token from @BotFather: HR/ops alerts only |
+| Credential name | Type | Values | Who sets it |
+|---|---|---|---|
+| `NovaTech DB (n8n_app)` | Postgres | Host `db` · Port `5432` · Database `novatech` · User `n8n_app` · Password = `NOVATECH_N8N_DB_PASSWORD` from `.env` · SSL `disable` (local only) | you, once |
+| `NovaTech Backend API key` | Header Auth | Name `X-API-Key` · Value = the first key in `INTERNAL_API_KEYS` from `.env` | you, once |
+| `NovaTech SMTP (outgoing email)` | SMTP | Development: Host `mailpit` · Port `1025` · SSL/TLS off (test inbox). **Real email: see below.** | you |
+| `Mistral AI (n8n)` | Mistral Cloud | API key (WF-04 drafts interview questions with `ministral-8b-latest`) | `sh scripts/n8n-mistral-key.sh` or paste it in the UI |
+
+### Sending real email (Gmail)
+
+Out of the box every email goes to Mailpit (http://localhost:8025) so nothing reaches real inboxes by accident.
+To deliver to candidates:
+
+1. In the Google account that should send the mail, turn on **2-Step Verification**, then create an
+   **App password** (Google Account → Security → App passwords). It is a 16-character password for SMTP only.
+2. n8n → **Credentials** → **NovaTech SMTP (outgoing email)**:
+   * **User**: the Gmail address
+   * **Password**: the app password
+   * **Host**: `smtp.gmail.com` · **Port**: `465` · **SSL/TLS**: on
+   * **Save** (n8n tests the connection).
+3. In `.env` set `MAIL_FROM_ADDRESS` to the same Gmail address and run `docker compose up -d seed`. This stores it
+   as `company.careers_email`; SWF-02 sends as *"<company name> Careers <that address>"*.
+
+Gmail allows about 500 recipients a day. For a company, use a transactional provider on its own domain (SES,
+Brevo, Postmark, Microsoft 365...) with SPF/DKIM: same three steps with that provider's SMTP host, port and login.
+Only SWF-02 sends email, so nothing else changes.
+
+### Mistral key for n8n
+
+`scripts/n8n-mistral-key.sh` (Windows: `scripts\n8n-mistral-key.ps1`) copies `N8N_MISTRAL_API_KEY` from `.env`
+into the credential (falling back to `MISTRAL_API_KEY`). Or: n8n → Credentials → **Mistral AI (n8n)** → paste
+the key → Save. Without a key the interviewer brief is still sent, just without suggested questions.
 
 The same `NovaTech Backend API key` credential also protects the operations webhooks n8n exposes to the backend
 (`/webhook/ops/kick`, `/webhook/ops/replay`, `/webhook/ops/notify`, `/webhook/ops/daily-report`, `/webhook/ops/onboarding-sweep`): callers must send the same `X-API-Key`.
@@ -38,8 +74,8 @@ Notes:
   `UPDATE`/`INSERT` directly gets `permission denied`. That is intentional: all writes go through the audited,
   idempotent functions.
 * From inside Docker the backend is **http://backend:8000**, not `localhost`.
-* All mail goes to Mailpit (http://localhost:8025) in development. For production, replace the SMTP credential
-  with the company's transactional provider. Only SWF-02 uses it.
+* All mail goes to Mailpit (http://localhost:8025) until you point `NovaTech SMTP (outgoing email)` at a real
+  provider (above). Only SWF-02 uses it.
 
 ## 3. Test the connections
 

@@ -1,21 +1,52 @@
 # Testing
 
-Four layers, from fast and isolated to the whole running system.
+Six layers, from fast and isolated to the whole running system, plus a separate quality evaluation of the AI.
 
 | Layer | What it proves | Where | How to run |
 |---|---|---|---|
-| Unit | Normalisation, validation, scoring engine, screening policy, interview evaluation, AI validation/retry/fallback, signed links, report numeric guardrail, offer letter rendering | `backend/tests/unit` | in the test image (below) |
-| API | HTTP contracts, auth (service key, signed links, staff identity), problem+json errors, fault injection, purpose-bound links | `backend/tests/api` (fakes for the database) | in the test image |
-| Database integration | The rule enforcer itself: state machine, actor rules, idempotency, timers, error queue, approvals, exactly-once employee, privileges of the runtime roles, every repository query as `backend_app` | `backend/tests/integration` (each test in a rolled-back transaction) | in the test image |
-| Scenarios (end to end) | The 23 scenarios of the brief and 42 fictional applications, on the running stack: n8n workflows, backend, database, email | `backend/tests/scenarios` | scenario runner (below) |
+| Unit (white-box) | Normalisation, validation, scoring engine, screening policy, interview evaluation incl. the AI rules, AI validation/retry/fallback for screening and interviews, the Mistral client (pacing, error classification), n8n client, storage, CV extraction, signed links, report numeric guardrail, offer letter | `backend/tests/unit` | test image (below) |
+| API | HTTP contracts, auth (service key, signed links, staff sessions, demo login), problem+json errors, fault injection | `backend/tests/api` (in-memory fakes for the database) | test image |
+| Database integration | The rule enforcer itself on a **real PostgreSQL started by testcontainers**: state machine, actor rules, idempotency, timers, candidate status updates, AI assessment storage, error queue, approvals, exactly-once employee, privileges of the runtime roles, every repository query as `backend_app` | `backend/tests/integration` | test image (starts a throwaway `postgres:17-alpine`) |
+| Journey (end to end) | One applicant through all 7 hiring steps on the running stack, with every email they receive | `backend/tests/scenarios/journey.py` | `python -m tests.scenarios.journey` |
+| Scenarios (end to end) | The 23 scenarios of the brief and 42 fictional applications | `backend/tests/scenarios/run.py` | `python -m tests.scenarios.run` |
+| CI | All of the above that needs no running stack, on every push (GitHub Actions) | `.github/workflows/ci.yml` | automatic |
+| AI evaluation | Quality and safety of the Mistral answers on 36 recruiter-labelled cases (DeepEval + Langfuse) | `backend/tests/ai_eval` | see [ai-evaluation.md](ai-evaluation.md) |
 
 ```bash
-docker compose --profile test run --rm backend-tests                 # lint + unit + API + DB integration
-docker compose --profile test run --rm backend-tests python -m tests.scenarios.run   # scenarios + 42 applications
-docker compose --profile test run --rm backend-tests python -m tests.scenarios.run --only 7,8,9 --skip-bulk
+docker compose --profile test run --rm backend-tests                 # ruff + unit + API + DB integration
+docker compose --profile test run --rm backend-tests pytest --cov=app --cov-report=term   # with coverage
+docker compose --profile test run --rm backend-tests python -m tests.scenarios.journey     # the 7 steps, live
+docker compose --profile test run --rm backend-tests python -m tests.scenarios.run         # scenarios + 42 apps
+docker compose --profile test run --rm backend-tests deepeval test run tests/ai_eval -m ai_eval   # AI evaluation
 ```
 
-Rebuild the test image after changing tests: `docker compose --profile test build backend-tests`.
+The test container mounts the working tree (`backend/app`, `backend/tests`), so it always tests the current code;
+rebuild it only after changing dependencies: `docker compose --profile test build backend-tests`.
+
+### Test database: testcontainers
+
+`tests/integration/conftest.py` starts a fresh PostgreSQL 17 container per test session, creates the three roles as
+production does, applies every migration in order (the `-- migrate:up` sections, like dbmate) and the NovaTech
+configuration seed. Each test runs in a transaction that is rolled back; the container is removed at the end. No
+test ever touches your working data. In Docker the test container reaches the host's Docker engine through the
+mounted socket; in CI it runs directly on the runner. Set `DATABASE_URL_TEST` and `DATABASE_URL_OWNER_TEST` to use
+an existing database instead.
+
+### Journey check
+
+`python -m tests.scenarios.journey` applies as one candidate (on the reserved test domain `example.com`) and walks
+the real interfaces: careers intake, the emailed slot link, HR shortlist/scorecard/decision in the staff API, the
+emailed approval and offer links, and onboarding tasks. It prints one line per step and the candidate's inbox:
+
+```
+[PASS] 1 Apply: APP-2026-00186 stored; confirmation email sent
+[PASS] 2 Screening: rule score 80.00, AI ... -> SCREENING_REVIEW
+[PASS] 3 Interview booked: invitation email -> slot booked -> confirmation email
+[PASS] 4 Scorecard + evaluation: interview score 84, AI assessment ..., final 82.80 -> INTERVIEW_REVIEW
+[PASS] 5 Decision: selected; candidate told the offer is being prepared
+[PASS] 6 Offer: approved -> offer email with letter -> accepted
+[PASS] 7 Onboarding: employee NT-2026-009, welcome email, 10 tasks completed -> ONBOARDED, closing email
+```
 
 ## Scenario runner
 
@@ -33,8 +64,9 @@ The runner behaves like the outside world:
 * **Configuration changes like an HR admin**: scenario 6 changes a scoring rule with the SQL documented in
   [configuration.md](configuration.md) and restores it afterwards.
 
-Requirements: a development stack (`FAULT_INJECTION_ENABLED=true`, `LLM_PROVIDER=stub` or a real model with an API
-key) with the n8n workflows deployed. The runner switches on `dev.fault_injection_enabled` (lets the intake carry an
+Requirements: a development stack (`FAULT_INJECTION_ENABLED=true`, `LLM_PROVIDER=stub` for reproducible AI answers)
+with the n8n workflows deployed. The runner creates its applicants on `example.com`; run it on a test installation,
+not on the one HR uses. The runner switches on `dev.fault_injection_enabled` (lets the intake carry an
 injected fault to later steps) and warns when fewer than 25 interview slots are open (re-run the seed to add more).
 
 Output: `reports/scenario-report.md` (summary, bulk screening table, evidence per scenario) and

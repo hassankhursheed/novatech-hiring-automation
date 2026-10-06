@@ -16,6 +16,8 @@ from typing import Any
 
 from tests.scenarios.harness import CheckFailed, Harness
 
+STAFF_EMAILS = {"usman": "usman.tariq@novatech.example"}
+
 CV = """Ali Raza - Backend Developer
 Python developer with 4 years of experience building REST APIs with FastAPI and Django.
 Designed PostgreSQL schemas, wrote SQL migrations and tuned queries; Docker and Git daily.
@@ -139,12 +141,30 @@ class Journey:
             app_id,
         )
         final = h.one("SELECT final_score FROM hiring.applications WHERE id = %s", app_id)["final_score"]
-        thanks = self.inbox(email, "Thank you for interviewing")
+        # The thank-you goes out while a decision is pending. When the decision is immediate, it is superseded on
+        # purpose (WF-02 skips it): the candidate's next email is the decision itself, never "a decision follows"
+        # after the decision.
+        h.settle()
+        thank_you = h.q(
+            "SELECT status, result->>'reason' AS reason FROM ops.scheduled_actions "
+            "WHERE application_id = %s AND action_type = 'NOTIFY_CANDIDATE' AND payload->>'to_status' = 'INTERVIEWED'",
+            app_id,
+        )
+        sent = bool(h.emails(email, "Thank you for interviewing"))
+        superseded = (
+            bool(thank_you) and "already emailed" in (thank_you[0]["reason"] or "") and status != "INTERVIEW_REVIEW"
+        )
         self.step(
             "4 Scorecard + evaluation",
-            bool(assessed) and final is not None and bool(thanks),
-            f"interview score 84, AI assessment {assessed[0]['status'] if assessed else '-'}, "
-            f"final {final} -> {status}",
+            bool(assessed) and final is not None and (sent or superseded),
+            f"interview score 84, AI assessment {assessed[0]['status'] if assessed else '-'}"
+            + (
+                f" ({assessed[0]['recommendation']}, {assessed[0]['evidence_alignment']})"
+                if assessed and assessed[0]["recommendation"]
+                else ""
+            )
+            + f", final {final} -> {status}; "
+            + ("thank-you email sent" if sent else "thank-you superseded by the immediate decision"),
         )
 
         # 5. Decision (30/70 score; a person decides when the case is in review) ----------------------------
@@ -210,6 +230,10 @@ class Journey:
             f"employee {employee['employee_code']} ({employee['company_email']}), welcome email, "
             f"{len(tasks)} tasks completed -> {status}, closing email",
         )
+
+        brief = h.emails(STAFF_EMAILS["usman"], payload["full_name"])
+        questions = bool(brief) and "Suggested questions" in h.email_html(brief[0])
+        print(f"Interviewer brief: {'with' if questions else 'without'} AI-drafted interview questions (n8n + Mistral)")
 
         print(f"\nThe candidate's inbox ({email}, {position}), oldest first:")
         for message in reversed(h.emails(email)):
