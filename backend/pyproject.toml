@@ -18,8 +18,7 @@ dependencies = [
   "python-docx>=1.1",
   "langchain>=1.0",
   "langchain-core>=1.0",
-  "langchain-anthropic>=1.1",
-  "langchain-openai>=1.0",
+  "langchain-mistralai>=1.0",
   "langfuse>=3.0",
   "tzdata>=2024.1",
   "pyjwt>=2.10",
@@ -27,17 +26,19 @@ dependencies = [
   "reportlab>=4.2",
 ]
 
-[project.optional-dependencies]
-mistral = ["langchain-mistralai>=1.0"]
-google = ["langchain-google-genai>=3.0"]
-
 [dependency-groups]
 dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
+  "pytest-cov>=6.0",
+  "testcontainers[postgres]>=4.9",
   "httpx>=0.28",
   "ruff>=0.8",
   "mypy>=1.13",
+]
+# AI evaluation (DeepEval assertions, Langfuse datasets/experiments): uv sync --group eval
+eval = [
+  "deepeval>=3.0",
 ]
 
 [tool.uv]
@@ -47,8 +48,11 @@ package = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-ra --strict-markers"
-markers = ["db: integration tests that need a running PostgreSQL (DATABASE_URL_TEST)"]
+addopts = "-ra --strict-markers -m 'not ai_eval'"
+markers = [
+  "db: integration tests against a real PostgreSQL (a throwaway testcontainers database, or DATABASE_URL_TEST)",
+  "ai_eval: AI quality assertions against the live model (needs MISTRAL_API_KEY; run with tests/ai_eval)",
+]
 
 [tool.ruff]
 line-length = 120

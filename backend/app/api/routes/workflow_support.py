@@ -2,7 +2,8 @@
 results through the api.* database functions.
 
   POST /v1/links                    signed link for an email (candidate or staff action)
-  POST /v1/interviews/evaluate      combined score and decision after an interview
+  POST /v1/interviews/ai-assessment advisory AI reading of the latest scorecard (validated, with fallback)
+  POST /v1/interviews/evaluate      combined score and decision after an interview (rules decide, AI can add review)
   POST /v1/offers/document          render and store the offer letter PDF
   POST /v1/reports/daily-summary    report prose (optional AI behind a numeric guardrail) + metrics table
 """
@@ -12,15 +13,23 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 
+from app.ai.interview_assessor import InterviewAssessor
 from app.ai.report_writer import ReportWriter
-from app.api.deps import get_hiring_repo, get_link_signer, get_report_writer, get_storage
+from app.ai.schemas import AssessmentResult
+from app.api.deps import get_hiring_repo, get_interview_assessor, get_link_signer, get_report_writer, get_storage
 from app.core.context import get_correlation_id
 from app.core.errors import ConflictError, UnprocessableError
 from app.core.faults import raise_if_injected
 from app.core.links import LinkSigner
 from app.core.logging import get_logger
 from app.core.security import require_internal_api_key
-from app.domain.evaluation import POLICY_VERSION, EvaluationConfigError, EvaluationSettings, evaluate
+from app.domain.evaluation import (
+    POLICY_VERSION,
+    EvaluationConfigError,
+    EvaluationSettings,
+    InterviewAIInput,
+    evaluate,
+)
 from app.domain.hiring_contracts import (
     DailySummaryRequest,
     DailySummaryResult,
@@ -60,6 +69,23 @@ async def create_link(
 
 
 @router.post(
+    "/v1/interviews/ai-assessment",
+    response_model=AssessmentResult,
+    tags=["interviews"],
+    summary="Advisory AI assessment of the latest interview scorecard (validated, with fallback)",
+)
+async def interview_ai_assessment(
+    request: Request,
+    body: EvaluationRequest,
+    repo: HiringRepository = Depends(get_hiring_repo),
+    assessor: InterviewAssessor = Depends(get_interview_assessor),
+) -> AssessmentResult:
+    fault = await raise_if_injected(request, "ai")
+    ctx, company = await repo.interview_assessment_context(str(body.application_id))
+    return await assessor.assess(ctx, company=company, correlation_id=get_correlation_id(), fault=fault)
+
+
+@router.post(
     "/v1/interviews/evaluate",
     response_model=EvaluationResult,
     tags=["interviews"],
@@ -83,10 +109,21 @@ async def evaluate_interview(
         interview_weight=float(cfg.get("evaluation.interview_weight", 0.7)),
         select_min_score=float(cfg.get("evaluation.select_min_score", 75)),
         review_min_score=float(cfg.get("evaluation.review_min_score", 60)),
+        ai_enabled=bool(inputs["ai_enabled"]),
     )
     app_score = float(inputs["application_score"]) if inputs["application_score"] is not None else None
+    ai = (
+        InterviewAIInput(
+            status=str(inputs["ai_status"]),
+            recommendation=inputs["ai_recommendation"],
+            evidence_alignment=inputs["ai_evidence_alignment"],
+            fallback_reason=inputs["ai_fallback_reason"],
+        )
+        if inputs["ai_status"]
+        else None
+    )
     try:
-        outcome = evaluate(app_score, float(inputs["interview_score"]), str(inputs["recommendation"]), settings)
+        outcome = evaluate(app_score, float(inputs["interview_score"]), str(inputs["recommendation"]), settings, ai)
     except EvaluationConfigError as exc:
         raise UnprocessableError(str(exc), code="INVALID_EVALUATION_SETTINGS") from exc
 
@@ -99,6 +136,8 @@ async def evaluate_interview(
         application_score=app_score,
         interview_score=float(inputs["interview_score"]),
         recommendation=str(inputs["recommendation"]),
+        ai_recommendation=inputs["ai_recommendation"],
+        ai_evidence_alignment=inputs["ai_evidence_alignment"],
         weights={"application": outcome.application_weight, "interview": outcome.interview_weight},
         thresholds={"select_min_score": settings.select_min_score, "review_min_score": settings.review_min_score},
         reason=outcome.reason,

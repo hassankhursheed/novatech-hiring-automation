@@ -8,12 +8,19 @@ final score = application_weight x screening score + interview_weight x intervie
 
 The numbers decide. The interviewer's recommendation can only send a case to human review when it
 contradicts the numbers; it never silently overrides them.
+
+The AI assessment of the scorecard (evaluation.ai_enabled) is advisory in the same way: it can only ADD a review.
+  AI enabled but unavailable/malformed       -> INTERVIEW_REVIEW
+  comments contradict the ratings            -> INTERVIEW_REVIEW
+  SELECTED by the numbers but AI says REJECT -> INTERVIEW_REVIEW
+  REJECTED by the numbers but AI says SELECT -> INTERVIEW_REVIEW
+  otherwise the decision above stands, with the AI's view in the reason.
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
 
-POLICY_VERSION = "interview-evaluation-1.0"
+POLICY_VERSION = "interview-evaluation-1.1"
 
 POSITIVE_RECOMMENDATIONS = {"HIRE", "STRONG_HIRE"}
 NEGATIVE_RECOMMENDATIONS = {"NO_HIRE", "STRONG_NO_HIRE"}
@@ -35,6 +42,7 @@ class EvaluationSettings:
     interview_weight: float
     select_min_score: float
     review_min_score: float
+    ai_enabled: bool = False
 
     def validate(self) -> None:
         if self.application_weight < 0 or self.interview_weight < 0:
@@ -43,6 +51,16 @@ class EvaluationSettings:
             raise EvaluationConfigError("at least one evaluation weight must be positive")
         if not 0 <= self.review_min_score <= self.select_min_score <= 100:
             raise EvaluationConfigError("thresholds must satisfy 0 <= review_min_score <= select_min_score <= 100")
+
+
+@dataclass(frozen=True)
+class InterviewAIInput:
+    """The stored AI assessment of the scorecard being evaluated."""
+
+    status: str  # COMPLETED | FALLBACK
+    recommendation: str | None = None  # SELECT | REVIEW | REJECT
+    evidence_alignment: str | None = None  # ALIGNED | PARTIAL | CONTRADICTORY
+    fallback_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +77,7 @@ def evaluate(
     interview_score: float,
     recommendation: str,
     settings: EvaluationSettings,
+    ai: InterviewAIInput | None = None,
 ) -> EvaluationOutcome:
     settings.validate()
     if not 0 <= interview_score <= 100:
@@ -96,6 +115,24 @@ def evaluate(
         decision = InterviewDecision.REJECTED
         reason = f"{summary}: below the review threshold {settings.review_min_score:g}"
 
+    if settings.ai_enabled:
+        decision, reason = _apply_ai(decision, reason, ai)
+
     return EvaluationOutcome(
         decision=decision, final_score=final, application_weight=app_w, interview_weight=int_w, reason=reason
     )
+
+
+def _apply_ai(decision: InterviewDecision, reason: str, ai: InterviewAIInput | None) -> tuple[InterviewDecision, str]:
+    review = InterviewDecision.INTERVIEW_REVIEW
+    if ai is None or ai.status.upper() != "COMPLETED" or not ai.recommendation:
+        why = ai.fallback_reason if ai and ai.fallback_reason else "no AI assessment available"
+        return review, f"{reason}; AI assessment unavailable ({why}) - human review required"
+    advice = ai.recommendation.upper()
+    if (ai.evidence_alignment or "").upper() == "CONTRADICTORY" and decision is not review:
+        return review, f"{reason}; AI assessment: the interviewer's comments contradict the ratings - human review"
+    if decision is InterviewDecision.SELECTED and advice == "REJECT":
+        return review, f"{reason}; AI assessment advises REJECT - human review required"
+    if decision is InterviewDecision.REJECTED and advice == "SELECT":
+        return review, f"{reason}; AI assessment advises SELECT - human review required"
+    return decision, f"{reason}; AI assessment advises {advice}"

@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
+from app.ai.prompts import INTERVIEW_PROMPT_VERSION
 from app.core.config import get_settings
 from app.core.links import LinkPurpose, LinkSigner
 from tests.conftest import (
@@ -201,3 +202,36 @@ def test_staff_replay_goes_through_n8n(client: TestClient, n8n: FakeN8n) -> None
     error_id = "00000000-0000-4000-8000-0000000000dd"
     response = client.post(f"/v1/staff/errors/{error_id}/replay", headers={**HEADERS, "X-Staff-Id": HR_ID})
     assert response.status_code == 200 and n8n.replays == [(error_id, HR_ID)]
+
+
+# ---- AI interview assessment --------------------------------------------------------------------------------
+def test_ai_assessment_of_the_latest_scorecard(client: TestClient) -> None:
+    body = client.post("/v1/interviews/ai-assessment", json={"application_id": APP_ID}, headers=HEADERS).json()
+    assert body["status"] == "COMPLETED" and body["prompt_version"] == INTERVIEW_PROMPT_VERSION
+    assert body["interview_id"] == "00000000-0000-4000-8000-00000000bbbb"
+    assert body["assessment"]["recommendation"] == "SELECT"
+    assert body["assessment"]["evidence_alignment"] == "ALIGNED"
+
+
+def test_ai_assessment_needs_the_internal_key(client: TestClient) -> None:
+    assert client.post("/v1/interviews/ai-assessment", json={"application_id": APP_ID}).status_code == 401
+
+
+def test_evaluation_sends_a_contradicted_scorecard_to_the_hiring_manager(
+    client: TestClient, hiring_repo: FakeHiringRepo
+) -> None:
+    hiring_repo.evaluation.update(
+        ai_enabled=True, ai_status="COMPLETED", ai_recommendation="SELECT", ai_evidence_alignment="CONTRADICTORY"
+    )
+    body = client.post("/v1/interviews/evaluate", json={"application_id": APP_ID}, headers=HEADERS).json()
+    assert body["decision"] == "INTERVIEW_REVIEW" and body["final_score"] == 85.8
+    assert body["ai_evidence_alignment"] == "CONTRADICTORY" and "contradict the ratings" in body["reason"]
+    assert body["policy_version"] == "interview-evaluation-1.1"
+
+
+def test_evaluation_requires_a_human_when_the_ai_assessment_is_missing(
+    client: TestClient, hiring_repo: FakeHiringRepo
+) -> None:
+    hiring_repo.evaluation.update(ai_enabled=True)
+    body = client.post("/v1/interviews/evaluate", json={"application_id": APP_ID}, headers=HEADERS).json()
+    assert body["decision"] == "INTERVIEW_REVIEW" and "human review required" in body["reason"]

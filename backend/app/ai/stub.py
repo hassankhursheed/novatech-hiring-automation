@@ -1,4 +1,4 @@
-"""Deterministic offline model (LLM_PROVIDER=stub) for demos and automated scenario tests.
+"""Deterministic test model (LLM_PROVIDER=stub) for automated tests and CI runs without an API key.
 
 It implements the same StructuredLLM interface as the real client, so every AI code path (validation, corrective
 retry, fallback, numeric guardrail, fault injection) runs exactly as in production, without an API key and with
@@ -28,7 +28,8 @@ def _number(text: str) -> float | None:
 
 
 def candidate_analysis(prompt: str) -> dict[str, Any]:
-    screened = [s.strip().lower() for s in _field(prompt, "Skills the company screens for").split(",") if s.strip()]
+    label = "Skills and tools the company screens for (alternatives, not all required)"
+    screened = [s.strip().lower() for s in _field(prompt, label).split(",") if s.strip()]
     declared = {s.strip().lower() for s in _field(prompt, "Declared skills").split(",") if s.strip()}
     application = prompt.split("<application>", 1)[-1].lower()
     matched = [
@@ -65,6 +66,51 @@ def candidate_analysis(prompt: str) -> dict[str, Any]:
     }
 
 
+_NEGATIVE = ("could not", "couldn't", "unable", "struggled", "weak", "poor", "no experience", "did not know")
+_POSITIVE = ("excellent", "outstanding", "very strong", "impressive", "exceptional")
+
+
+def interview_assessment(prompt: str) -> dict[str, Any]:
+    def rating(label: str) -> int:
+        return int(_number(_field(prompt, f"- {label}")) or 0)
+
+    ratings = {k: rating(k) for k in ("Technical skills", "Communication", "Problem solving", "Relevant experience")}
+    score = _number(_field(prompt, "Interview score (0-100)")) or 0.0
+    advice = _field(prompt, "Interviewer's recommendation").upper()
+    comments = prompt.split("Interviewer's comments:", 1)[-1].split("</interview>", 1)[0].strip().lower()
+    negative = [w for w in _NEGATIVE if w in comments]
+    positive = [w for w in _POSITIVE if w in comments]
+
+    if (ratings["Technical skills"] >= 4 and negative) or (ratings["Technical skills"] <= 2 and positive):
+        alignment = "CONTRADICTORY"
+    elif len(comments) < 40:
+        alignment = "PARTIAL"
+    else:
+        alignment = "ALIGNED"
+    if alignment == "CONTRADICTORY":
+        recommendation = "REVIEW"  # the evidence cannot be trusted either way: a person reads the scorecard
+    elif score >= 75 and "NO" not in advice:
+        recommendation = "SELECT"
+    elif score < 50 and "NO" in advice:
+        recommendation = "REJECT"
+    else:
+        recommendation = "REVIEW"
+    strengths = [f"{k.lower()} rated {v}/5" for k, v in ratings.items() if v >= 4][:4]
+    concerns = [f"{k.lower()} rated {v}/5" for k, v in ratings.items() if v <= 2][:4]
+    if alignment == "CONTRADICTORY":
+        concerns.append("the written comments do not support the ratings")
+    return {
+        "recommendation": recommendation,
+        "evidence_alignment": alignment,
+        "strengths": strengths,
+        "concerns": concerns,
+        "summary": (
+            f"Interview score {score:g} with the interviewer recommending {advice.lower() or 'nothing'}. "
+            f"The comments {'contradict' if alignment == 'CONTRADICTORY' else 'support'} the ratings."
+        ),
+    }
+
+
 def daily_summary(prompt: str) -> dict[str, Any]:
     metrics = json.loads(prompt.split("Metrics JSON:", 1)[-1].strip() or "{}")
 
@@ -97,6 +143,8 @@ class StubStructuredLLM:
     async def generate(self, system: str, user: str, *, session_id: str | None) -> LLMOutcome:
         if self._schema == "CandidateAnalysisWire":
             return LLMOutcome(candidate_analysis(user), None, "end_turn")
+        if self._schema == "InterviewAssessmentWire":
+            return LLMOutcome(interview_assessment(user), None, "end_turn")
         if self._schema == "DailySummaryWire":
             return LLMOutcome(daily_summary(user), None, "end_turn")
         return LLMOutcome(None, f"stub model has no answer for {self._schema}", "end_turn")

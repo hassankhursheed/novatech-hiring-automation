@@ -6,7 +6,9 @@ from typing import Annotated, Literal
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-LLMProvider = Literal["anthropic", "openai", "mistral", "google", "stub", "none"]
+# mistral: Mistral AI (La Plateforme). none: AI switched off (rules only, every case the AI would have read goes to a
+# person). stub: deterministic offline model for automated tests and CI only; refused in production.
+LLMProvider = Literal["mistral", "none", "stub"]
 
 
 class Settings(BaseSettings):
@@ -44,11 +46,19 @@ class Settings(BaseSettings):
     n8n_base_url: str = "http://n8n:5678"
     n8n_api_key: SecretStr | None = None
 
-    llm_provider: LLMProvider = "anthropic"
-    llm_model: str = "claude-opus-5"
+    llm_provider: LLMProvider = "mistral"
+    # ministral-14b-latest: the strongest model a free (Experiment) Mistral key may call (30 requests/min), with
+    # native JSON-schema output. With a paid key use mistral-medium-latest. Pin a dated version (e.g.
+    # ministral-14b-2512) when you freeze a release, so evaluation results stay comparable.
+    llm_model: str = "ministral-14b-latest"
+    mistral_api_key: SecretStr | None = None
     llm_timeout_seconds: float = Field(default=60, gt=0, le=600)
-    llm_max_tokens: int = Field(default=16000, ge=256, le=64000)
+    llm_max_tokens: int = Field(default=2000, ge=256, le=32000)
+    llm_temperature: float = Field(default=0.0, ge=0, le=1)
     llm_structured_method: Literal["json_schema", "function_calling"] = "json_schema"
+    # Requests per second per backend worker process (the image runs 2). 0.25 x 2 = 30 requests/min, the free-tier
+    # limit of ministral-14b; a 429 is still handled (retryable, the dispatcher backs off).
+    llm_requests_per_second: float = Field(default=0.25, gt=0, le=50)
 
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
@@ -74,7 +84,7 @@ class Settings(BaseSettings):
             # Fault injection must never be reachable in production, whatever the env file says.
             self.fault_injection_enabled = False
             if self.llm_provider == "stub":
-                raise ValueError("LLM_PROVIDER=stub is for demos and tests; configure a real provider or 'none'")
+                raise ValueError("LLM_PROVIDER=stub is for automated tests; use 'mistral' (or 'none' to switch AI off)")
             if not self.internal_api_keys:
                 raise ValueError("INTERNAL_API_KEYS must be set in production")
             if any(len(k.get_secret_value()) < 24 for k in self.internal_api_keys):
@@ -106,6 +116,11 @@ class Settings(BaseSettings):
         if self.n8n_api_key and self.n8n_api_key.get_secret_value():
             return self.n8n_api_key.get_secret_value()
         return self.internal_api_keys[0].get_secret_value() if self.internal_api_keys else None
+
+    @property
+    def llm_api_key(self) -> str | None:
+        value = self.mistral_api_key.get_secret_value().strip() if self.mistral_api_key else ""
+        return value or None
 
     @property
     def langfuse_enabled(self) -> bool:

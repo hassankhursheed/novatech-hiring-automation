@@ -45,6 +45,8 @@ class EvaluationResult(BaseModel):
     application_score: float | None
     interview_score: float
     recommendation: str
+    ai_recommendation: str | None = None
+    ai_evidence_alignment: str | None = None
     weights: dict[str, float]
     thresholds: dict[str, float]
     reason: str
