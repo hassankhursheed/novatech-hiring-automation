@@ -1,6 +1,5 @@
 """FastAPI application factory."""
 
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -9,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.ai.analyzer import CandidateAnalyzer
+from app.ai.interview_assessor import InterviewAssessor
 from app.ai.llm import LangChainStructuredLLM, StructuredLLM
 from app.ai.report_writer import DailySummaryWire, ReportWriter
-from app.ai.schemas import CandidateAnalysisWire
+from app.ai.schemas import CandidateAnalysisWire, InterviewAssessmentWire
 from app.ai.stub import StubStructuredLLM
 from app.api.routes import auth, health, intake, portal, screening, staff, workflow_support
 from app.core.config import Settings, get_settings
@@ -27,13 +27,6 @@ from app.services.storage import LocalStorage
 
 log = get_logger(__name__)
 
-_PROVIDER_KEY_ENV = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "google": "GOOGLE_API_KEY",
-}
-
 
 def _build_llm(settings: Settings, schema: type[BaseModel], run_name: str) -> StructuredLLM | None:
     """The configured LLM, or None when AI is disabled or misconfigured (callers then fall back)."""
@@ -42,12 +35,11 @@ def _build_llm(settings: Settings, schema: type[BaseModel], run_name: str) -> St
         return None
     if settings.llm_provider == "stub":
         log.warning(
-            "ai_stub", feature=run_name, reason="LLM_PROVIDER=stub: deterministic offline model (not for production)"
+            "ai_stub", feature=run_name, reason="LLM_PROVIDER=stub: deterministic test model (automated tests only)"
         )
         return StubStructuredLLM(schema)
-    key_env = _PROVIDER_KEY_ENV[settings.llm_provider]
-    if not os.environ.get(key_env, "").strip():
-        log.warning("ai_disabled", feature=run_name, reason=f"{key_env} is not set")
+    if not settings.llm_api_key:
+        log.warning("ai_disabled", feature=run_name, reason="MISTRAL_API_KEY is not set")
         return None
     try:
         return LangChainStructuredLLM(settings, schema, run_name=run_name)
@@ -70,6 +62,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.staff_directory = StaffDirectory(db)
         app.state.storage = LocalStorage(settings.storage_dir)
         app.state.analyzer = CandidateAnalyzer(_build_llm(settings, CandidateAnalysisWire, "candidate_analysis"))
+        app.state.interview_assessor = InterviewAssessor(
+            _build_llm(settings, InterviewAssessmentWire, "interview_assessment")
+        )
         app.state.report_writer = ReportWriter(_build_llm(settings, DailySummaryWire, "daily_report_summary"))
         app.state.link_signer = LinkSigner.from_settings(settings)
         app.state.n8n = N8nClient(settings)

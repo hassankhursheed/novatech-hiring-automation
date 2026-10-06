@@ -11,6 +11,7 @@ from typing import Any
 from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
+from app.ai.interview_assessor import InterviewContext
 from app.core.db import Database
 from app.core.errors import ConflictError, NotFoundError
 
@@ -99,15 +100,25 @@ class HiringRepository:
         return await self._one("SELECT * FROM api.submit_interview_feedback(%s, %s, %s)", interview_id, feedback, ctx)
 
     async def evaluation_inputs(self, application_id: str) -> DictRow:
+        """Latest scorecard of the application, with the AI assessment of exactly that scorecard (if any)."""
         row = await self._db.fetch_one(
             """SELECT a.id::text AS application_id, a.status, a.application_score, f.interview_score,
-                      f.recommendation, f.interview_code
+                      f.recommendation, f.interview_code, f.interview_id::text AS interview_id,
+                      ia.status AS ai_status, ia.recommendation AS ai_recommendation,
+                      ia.evidence_alignment AS ai_evidence_alignment, ia.fallback_reason AS ai_fallback_reason,
+                      coalesce((SELECT value::text::boolean FROM hiring.settings
+                                 WHERE key = 'evaluation.ai_enabled'), false) AS ai_enabled
                  FROM hiring.applications a
                  LEFT JOIN LATERAL (
-                   SELECT fb.interview_score, fb.recommendation, i.interview_code
+                   SELECT fb.interview_score, fb.recommendation, i.interview_code, i.id AS interview_id
                      FROM hiring.interviews i JOIN hiring.interview_feedback fb ON fb.interview_id = i.id
                     WHERE i.application_id = a.id
                     ORDER BY i.round DESC LIMIT 1) f ON true
+                 LEFT JOIN LATERAL (
+                   SELECT x.status, x.recommendation, x.evidence_alignment, x.fallback_reason
+                     FROM hiring.interview_assessments x
+                    WHERE x.interview_id = f.interview_id
+                    ORDER BY (x.status = 'COMPLETED') DESC, x.created_at DESC LIMIT 1) ia ON true
                 WHERE a.id = %s""",
             (application_id,),
         )
@@ -116,6 +127,56 @@ class HiringRepository:
         if row["interview_score"] is None:
             raise ConflictError("no interview feedback has been recorded yet", code="FEEDBACK_MISSING")
         return row
+
+    async def interview_assessment_context(self, application_id: str) -> tuple[InterviewContext, str]:
+        """What the AI reads about the latest scorecard: position, screening results and the scorecard itself."""
+        row = await self._db.fetch_one(
+            """SELECT a.id::text AS application_id, i.id::text AS interview_id, c.full_name, s.full_name AS interviewer,
+                      p.title, p.department, p.description, a.application_score,
+                      fb.technical_skills, fb.communication, fb.problem_solving, fb.experience, fb.team_fit,
+                      fb.interview_score, fb.recommendation, fb.comments,
+                      ai.summary AS screening_summary, ai.missing_skills,
+                      (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.name') AS company
+                 FROM hiring.applications a
+                 JOIN hiring.candidates c ON c.id = a.candidate_id
+                 JOIN hiring.job_positions p ON p.id = a.job_position_id
+                 JOIN LATERAL (
+                   SELECT i.* FROM hiring.interviews i
+                    WHERE i.application_id = a.id
+                      AND EXISTS (SELECT 1 FROM hiring.interview_feedback x WHERE x.interview_id = i.id)
+                    ORDER BY i.round DESC LIMIT 1) i ON true
+                 JOIN hiring.interview_feedback fb ON fb.interview_id = i.id
+                 JOIN hiring.staff_members s ON s.id = fb.interviewer_id
+                 LEFT JOIN LATERAL (
+                   SELECT x.summary, x.missing_skills FROM hiring.ai_analyses x
+                    WHERE x.application_id = a.id AND x.status = 'COMPLETED'
+                    ORDER BY x.created_at DESC LIMIT 1) ai ON true
+                WHERE a.id = %s""",
+            (application_id,),
+        )
+        if row is None:
+            raise ConflictError("no interview feedback has been recorded yet", code="FEEDBACK_MISSING")
+        ctx = InterviewContext(
+            application_id=row["application_id"],
+            interview_id=row["interview_id"],
+            candidate_name=row["full_name"],
+            interviewer_name=row["interviewer"],
+            position_title=row["title"],
+            department=row["department"],
+            position_description=row["description"],
+            screening_score=float(row["application_score"]) if row["application_score"] is not None else None,
+            screening_summary=row["screening_summary"],
+            missing_skills=list(row["missing_skills"] or []),
+            technical_skills=row["technical_skills"],
+            communication=row["communication"],
+            problem_solving=row["problem_solving"],
+            experience=row["experience"],
+            team_fit=row["team_fit"],
+            interview_score=float(row["interview_score"]),
+            interviewer_recommendation=row["recommendation"],
+            comments=row["comments"],
+        )
+        return ctx, str(row["company"] or "NovaTech")
 
     # ---- offers ---------------------------------------------------------------------------------------
     async def offer_snapshot(self, offer_id: str) -> dict[str, Any]:
@@ -306,6 +367,17 @@ class StaffDirectory:
                       f.interview_score, f.recommendation, f.comments, f.submitted_at
                  FROM hiring.interview_feedback f JOIN hiring.interviews i ON i.id = f.interview_id
                 WHERE i.application_id = %s ORDER BY f.submitted_at""",
+                (application_id,),
+            )
+        ]
+        app["interview_assessments"] = [
+            dict(r)
+            for r in await many(
+                """SELECT i.interview_code, x.status, x.provider, x.model, x.prompt_version, x.recommendation,
+                      x.evidence_alignment, x.strengths, x.concerns, x.summary, x.fallback_reason, x.attempts,
+                      x.created_at
+                 FROM hiring.interview_assessments x JOIN hiring.interviews i ON i.id = x.interview_id
+                WHERE x.application_id = %s ORDER BY x.created_at DESC""",
                 (application_id,),
             )
         ]

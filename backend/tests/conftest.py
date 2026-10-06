@@ -13,7 +13,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.ai.analyzer import CandidateAnalyzer, CandidateContext
+from app.ai.interview_assessor import InterviewAssessor, InterviewContext
 from app.ai.llm import LLMOutcome
+from app.ai.schemas import InterviewAssessmentWire
+from app.ai.stub import StubStructuredLLM
 from app.core.config import get_settings
 from app.core.errors import NotFoundError
 from app.domain.scoring import ScoringConfig, ScoringInput, ScoringRule
@@ -95,6 +98,31 @@ VALID_ANALYSIS = {
     "summary": "Relevant Python backend experience with FastAPI.",
     "recommendation": "SHORTLIST",
 }
+
+
+def interview_context(**overrides: Any) -> InterviewContext:
+    values: dict[str, Any] = {
+        "application_id": "00000000-0000-4000-8000-00000000aaaa",
+        "interview_id": "00000000-0000-4000-8000-00000000bbbb",
+        "candidate_name": "Ayesha Khan",
+        "interviewer_name": "Bilal Ahmed",
+        "position_title": "Python Developer",
+        "department": "Engineering",
+        "position_description": "Backend engineer building APIs with Python, FastAPI and PostgreSQL.",
+        "screening_score": 82.0,
+        "screening_summary": "Shows Python, FastAPI and PostgreSQL with 4 years of experience.",
+        "missing_skills": ["kubernetes"],
+        "technical_skills": 4,
+        "communication": 4,
+        "problem_solving": 4,
+        "experience": 4,
+        "team_fit": 5,
+        "interview_score": 84.0,
+        "interviewer_recommendation": "HIRE",
+        "comments": "Designed a clean REST API for the take-home task and explained indexing trade-offs clearly.",
+    }
+    values.update(overrides)
+    return InterviewContext(**values)
 
 
 class FakeLLM:
@@ -252,6 +280,12 @@ class FakeHiringRepo:
             "interview_score": 84,
             "recommendation": "HIRE",
             "interview_code": "INT-2026-0001",
+            "interview_id": "00000000-0000-4000-8000-00000000bbbb",
+            "ai_enabled": False,
+            "ai_status": None,
+            "ai_recommendation": None,
+            "ai_evidence_alignment": None,
+            "ai_fallback_reason": None,
         }
         self.active_staff = {INTERVIEWER_ID, APPROVER_ID, HR_ID}
 
@@ -285,6 +319,9 @@ class FakeHiringRepo:
 
     async def evaluation_inputs(self, application_id: str) -> dict[str, Any]:
         return self.evaluation
+
+    async def interview_assessment_context(self, application_id: str) -> tuple[InterviewContext, str]:
+        return interview_context(application_id=application_id), "NovaTech Solutions"
 
     async def offer_snapshot(self, offer_id: str) -> dict[str, Any]:
         return self.offer
@@ -379,5 +416,6 @@ def client(
     app.state.n8n = n8n
     app.state.link_signer = LinkSigner.from_settings(get_settings())
     app.state.report_writer = ReportWriter(None)
+    app.state.interview_assessor = InterviewAssessor(StubStructuredLLM(InterviewAssessmentWire))
     # No `with` block: the lifespan (which opens the DB pool) does not run in API unit tests.
     yield TestClient(app, raise_server_exceptions=False)

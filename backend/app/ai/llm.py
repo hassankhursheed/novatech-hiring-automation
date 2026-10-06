@@ -1,13 +1,18 @@
-"""Provider-agnostic structured LLM client built on LangChain.
+"""Structured LLM client for Mistral AI, built on LangChain (langchain-mistralai).
 
-Swapping providers is configuration (LLM_PROVIDER / LLM_MODEL / <PROVIDER>_API_KEY), not code.
-Transport failures are classified so callers can retry correctly:
+Configuration: LLM_PROVIDER=mistral, LLM_MODEL (default mistral-medium-latest), MISTRAL_API_KEY.
+Output is requested as JSON that follows our schema (Mistral's native json_schema response format) and is then
+validated again by our own pydantic models before anything is stored.
+
+Calls are paced (LLM_REQUESTS_PER_SECOND, default 1) so a free-tier key is not throttled when many applications
+arrive at once. Transport failures are classified so callers can retry correctly:
   timeouts, connection errors, 408/409/429/5xx -> UpstreamUnavailableError (retryable, HTTP 503)
   other 4xx (bad key, unknown model, bad request) -> UpstreamRejectedError (not retryable, HTTP 502)
 Content problems (malformed/invalid output, refusals) are NOT exceptions; they come back in LLMOutcome.
 """
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -41,27 +46,45 @@ class StructuredLLM(Protocol):
 
 
 def build_chat_model(settings: Settings) -> BaseChatModel:
-    """Instantiate the configured provider. Imports are lazy so unused providers need not be installed."""
-    common: dict[str, Any] = {"model": settings.llm_model, "timeout": settings.llm_timeout_seconds, "max_retries": 1}
-    provider = settings.llm_provider
-    if provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
+    """The Mistral chat model. Retries stay with the orchestrator (n8n backoff), so the client tries once."""
+    if settings.llm_provider != "mistral":
+        raise ValueError(f"unsupported LLM provider {settings.llm_provider}")
+    if not settings.llm_api_key:
+        raise ValueError("MISTRAL_API_KEY is not set")
+    from langchain_mistralai import ChatMistralAI
 
-        # No temperature: current Claude models reject sampling parameters; thinking runs adaptively.
-        return ChatAnthropic(max_tokens=settings.llm_max_tokens, **common)
-    if provider == "openai":
-        from langchain_openai import ChatOpenAI
+    return ChatMistralAI(
+        model=settings.llm_model,
+        api_key=settings.llm_api_key,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+        timeout=int(settings.llm_timeout_seconds),
+        max_retries=1,
+    )
 
-        return ChatOpenAI(**common)
-    if provider == "mistral":
-        from langchain_mistralai import ChatMistralAI
 
-        return ChatMistralAI(**common)
-    if provider == "google":
-        from langchain_google_genai import ChatGoogleGenerativeAI
+class RequestPacer:
+    """Keeps at most `rate` requests per second across this process (free-tier keys are rate limited)."""
 
-        return ChatGoogleGenerativeAI(**common)
-    raise ValueError(f"unsupported LLM provider {provider}")
+    def __init__(self, rate: float) -> None:
+        self._interval = 1.0 / rate
+        self._lock = asyncio.Lock()
+        self._next_at = 0.0
+
+    async def wait(self) -> None:
+        async with self._lock:
+            loop = asyncio.get_running_loop()
+            delay = self._next_at - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self._next_at = max(loop.time(), self._next_at) + self._interval
+
+
+_PACERS: dict[float, RequestPacer] = {}
+
+
+def pacer_for(rate: float) -> RequestPacer:
+    return _PACERS.setdefault(rate, RequestPacer(rate))
 
 
 def classify_provider_error(exc: BaseException) -> Exception:
@@ -97,6 +120,20 @@ def _langfuse_handler(settings: Settings) -> Any | None:
     return CallbackHandler()
 
 
+def _trace_attributes(handler: Any | None, session_id: str | None, run_name: str, settings: Settings) -> Any:
+    """Langfuse v4: puts the correlation id (session), feature tag and environment on every span of the call."""
+    if handler is None:
+        return contextlib.nullcontext()
+    from langfuse import propagate_attributes
+
+    return propagate_attributes(
+        session_id=session_id or None,
+        tags=[run_name, settings.llm_model],
+        trace_name=run_name,
+        environment=settings.app_env,
+    )
+
+
 class LangChainStructuredLLM:
     def __init__(self, settings: Settings, schema: type[BaseModel], *, run_name: str) -> None:
         self.provider = settings.llm_provider
@@ -105,6 +142,7 @@ class LangChainStructuredLLM:
         self._run_name = run_name
         chat = build_chat_model(settings)
         self._runnable = chat.with_structured_output(schema, method=settings.llm_structured_method, include_raw=True)
+        self._pacer = pacer_for(settings.llm_requests_per_second)
 
     async def generate(self, system: str, user: str, *, session_id: str | None) -> LLMOutcome:
         handler = _langfuse_handler(self._settings)
@@ -114,8 +152,10 @@ class LangChainStructuredLLM:
             # Correlation id groups every AI call of one business transaction in the tracing UI (no PII).
             "metadata": {"langfuse_session_id": session_id, "langfuse_tags": [self._run_name]},
         }
+        await self._pacer.wait()
         try:
-            result = await self._runnable.ainvoke([SystemMessage(system), HumanMessage(user)], config=config)
+            with _trace_attributes(handler, session_id, self._run_name, self._settings):
+                result = await self._runnable.ainvoke([SystemMessage(system), HumanMessage(user)], config=config)
         except (UpstreamUnavailableError, UpstreamRejectedError):
             raise
         except Exception as exc:

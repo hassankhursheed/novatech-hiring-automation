@@ -7,6 +7,7 @@ from fastapi import Depends, Header, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.ai.analyzer import CandidateAnalyzer
+from app.ai.interview_assessor import InterviewAssessor
 from app.ai.report_writer import ReportWriter
 from app.core.config import Settings, get_settings
 from app.core.db import Database
@@ -47,6 +48,11 @@ def get_storage(request: Request) -> Storage:
 def get_analyzer(request: Request) -> CandidateAnalyzer:
     analyzer: CandidateAnalyzer = request.app.state.analyzer
     return analyzer
+
+
+def get_interview_assessor(request: Request) -> InterviewAssessor:
+    assessor: InterviewAssessor = request.app.state.interview_assessor
+    return assessor
 
 
 def get_report_writer(request: Request) -> ReportWriter:

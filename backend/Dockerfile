@@ -10,21 +10,18 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# Optional provider packages, e.g. --build-arg LLM_EXTRAS="--extra mistral --extra google"
-ARG LLM_EXTRAS=""
-
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev ${LLM_EXTRAS}
+    uv sync --frozen --no-dev
 
 # ---------------------------------------------------------------------------------------------
-# Test: same dependencies + dev tools. Runs lint, type-independent unit/API tests and (when
-# DATABASE_URL_TEST is set) database integration tests:  docker compose --profile test run --rm backend-tests
+# Test: same dependencies + dev tools (pytest, testcontainers, coverage, ruff) + AI evaluation (DeepEval).
+#   docker compose --profile test run --rm backend-tests
 # ---------------------------------------------------------------------------------------------
 FROM builder AS test
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen ${LLM_EXTRAS}
+    uv sync --frozen --group eval
 COPY app ./app
 COPY tests ./tests
 ENV PATH="/opt/venv/bin:$PATH" APP_ENV=test PYTHONDONTWRITEBYTECODE=1
