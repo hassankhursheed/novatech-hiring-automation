@@ -4,7 +4,6 @@ API tests use an in-memory fake of this repository, so these tests are what prov
 casts, and that backend_app has the privileges every query needs. Everything runs in one rolled-back transaction.
 """
 
-import os
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -17,12 +16,9 @@ from psycopg.types.json import Jsonb
 from app.api.routes.staff import QUEUES
 from app.core.errors import NotFoundError
 from app.repositories.hiring import HiringRepository, StaffDirectory
+from tests.integration.conftest import DatabaseUrls
 
 pytestmark = pytest.mark.db
-
-APP_URL = os.environ.get("DATABASE_URL_TEST")
-if not APP_URL:
-    pytest.skip("DATABASE_URL_TEST not set", allow_module_level=True)
 
 SYSTEM = {"actor_type": "SYSTEM", "actor_id": "pytest", "workflow_name": "WF-TEST"}
 USMAN_INTERVIEWER = "00000000-0000-4000-8000-000000000004"
@@ -46,8 +42,8 @@ class TransactionDatabase:
 
 
 @pytest.fixture
-async def db() -> AsyncIterator[TransactionDatabase]:
-    conn = await psycopg.AsyncConnection.connect(APP_URL, row_factory=dict_row)  # type: ignore[arg-type]
+async def db(database_urls: DatabaseUrls) -> AsyncIterator[TransactionDatabase]:
+    conn = await psycopg.AsyncConnection.connect(database_urls.app, row_factory=dict_row)
     try:
         yield TransactionDatabase(conn)
     finally:
@@ -160,6 +156,36 @@ async def test_candidate_interview_offer_and_acceptance_through_the_repository(
     )
     inputs = await repo.evaluation_inputs(app_id)
     assert float(inputs["interview_score"]) == 84 and inputs["recommendation"] == "HIRE"
+    assert inputs["ai_enabled"] is True and inputs["ai_status"] is None  # no AI assessment yet
+
+    context, company = await repo.interview_assessment_context(app_id)
+    assert context.interview_id == interview_id and context.technical_skills == 5 and company
+    assert context.interviewer_recommendation == "HIRE" and context.comments == "Strong."
+    recorded = await call(
+        db,
+        "SELECT * FROM api.record_interview_assessment(%s, %s, %s)",
+        interview_id,
+        {
+            "status": "COMPLETED",
+            "prompt_version": "interview-assessment/v1",
+            "input_hash": uuid.uuid4().hex,
+            "provider": "stub",
+            "model": "stub-deterministic-1",
+            "attempts": 1,
+            "latency_ms": 5,
+            "assessment": {
+                "recommendation": "SELECT",
+                "evidence_alignment": "ALIGNED",
+                "strengths": ["technical skills rated 5/5"],
+                "concerns": [],
+                "summary": "Strong interview with consistent ratings.",
+            },
+        },
+        SYSTEM,
+    )
+    assert recorded["status"] == "COMPLETED" and recorded["replayed"] is False
+    inputs = await repo.evaluation_inputs(app_id)
+    assert inputs["ai_status"] == "COMPLETED" and inputs["ai_recommendation"] == "SELECT"
 
     await call(
         db,
@@ -206,6 +232,7 @@ async def test_portal_read_models_and_single_use_links(db: TransactionDatabase, 
     detail = await directory.application_detail(app_id)
     assert detail["status"] == "SHORTLISTED" and detail["history"] and detail["scores"]
     assert detail["interviews"] and detail["timeline"] and isinstance(detail["staff_transitions"], list)
+    assert detail["interview_assessments"] == []  # read by backend_app; empty until a scorecard is assessed
     assert any(t["to_status"] == "REJECTED" for t in detail["staff_transitions"])
     listed = await directory.applications("SHORTLISTED", detail["application_code"], 10, 0)
     assert [r["application_id"] for r in listed] == [app_id]

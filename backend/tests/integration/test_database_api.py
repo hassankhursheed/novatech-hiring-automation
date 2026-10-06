@@ -1,12 +1,10 @@
 """Integration tests for the database write API (the rule enforcer).
 
-Run against a migrated + seeded database:
-    docker compose --profile test run --rm backend-tests
-Each test runs in a transaction that is rolled back, so the database is left unchanged.
+Runs against a throwaway, migrated + seeded PostgreSQL (testcontainers, see conftest.py). Each test runs in a
+transaction that is rolled back.
 """
 
 import json
-import os
 import uuid
 from collections.abc import Iterator
 from typing import Any
@@ -15,10 +13,10 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+from tests.integration.conftest import DatabaseUrls
+
 pytestmark = pytest.mark.db
 
-APP_URL = os.environ.get("DATABASE_URL_TEST")
-OWNER_URL = os.environ.get("DATABASE_URL_OWNER_TEST")
 SYSTEM = {
     "actor_type": "SYSTEM",
     "actor_id": "pytest",
@@ -28,22 +26,17 @@ SYSTEM = {
 }
 RECRUITER = {"actor_type": "STAFF", "actor_id": "00000000-0000-4000-8000-000000000002"}
 
-if not APP_URL:
-    pytest.skip("DATABASE_URL_TEST not set", allow_module_level=True)
-
 
 @pytest.fixture
-def db() -> Iterator[psycopg.Connection[dict[str, Any]]]:
-    with psycopg.connect(APP_URL, row_factory=dict_row) as conn:  # type: ignore[arg-type]
+def db(database_urls: DatabaseUrls) -> Iterator[psycopg.Connection[dict[str, Any]]]:
+    with psycopg.connect(database_urls.app, row_factory=dict_row) as conn:
         yield conn
         conn.rollback()
 
 
 @pytest.fixture
-def owner() -> Iterator[psycopg.Connection[dict[str, Any]]]:
-    if not OWNER_URL:
-        pytest.skip("DATABASE_URL_OWNER_TEST not set")
-    with psycopg.connect(OWNER_URL, row_factory=dict_row) as conn:
+def owner(database_urls: DatabaseUrls) -> Iterator[psycopg.Connection[dict[str, Any]]]:
+    with psycopg.connect(database_urls.owner, row_factory=dict_row) as conn:
         yield conn
         conn.rollback()
 
