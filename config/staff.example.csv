@@ -1,0 +1,9 @@
+id,full_name,email,department,job_title,roles,active
+00000000-0000-4000-8000-000000000001,HR Manager,hr@yourcompany.com,People,HR Manager,HR_ADMIN|RECRUITER,true
+00000000-0000-4000-8000-000000000002,Recruiter,recruiter@yourcompany.com,People,Talent Acquisition Specialist,RECRUITER,true
+00000000-0000-4000-8000-000000000003,Engineering Manager,engineering@yourcompany.com,Engineering,Engineering Manager,HIRING_MANAGER|INTERVIEWER|APPROVER_L1,true
+00000000-0000-4000-8000-000000000004,Python Interviewer,python.interviews@yourcompany.com,Engineering,Senior Python Engineer,INTERVIEWER,true
+00000000-0000-4000-8000-000000000005,QA Lead,qa@yourcompany.com,Engineering,QA Lead,INTERVIEWER,true
+00000000-0000-4000-8000-000000000006,Sales Director,sales@yourcompany.com,Sales,Sales Director,HIRING_MANAGER|INTERVIEWER|APPROVER_L1,true
+00000000-0000-4000-8000-000000000007,Finance Director,finance@yourcompany.com,Finance,Chief Financial Officer,APPROVER_L2,true
+00000000-0000-4000-8000-000000000008,IT Administrator,it@yourcompany.com,IT,IT Administrator,IT_ADMIN,true

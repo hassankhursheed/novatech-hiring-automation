@@ -73,8 +73,12 @@ services:
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       DEMO_FAST_TIMERS: ${DEMO_FAST_TIMERS:-false}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      OPS_ALERT_EMAIL: ${OPS_ALERT_EMAIL:-}
+      APP_ENV: ${APP_ENV:-development}
+      FAULT_INJECTION_ENABLED: ${FAULT_INJECTION_ENABLED:-false}
     volumes:
       - ./db/seed:/seed:ro
+      - ./config:/config:ro
       - ./infra/seed/run-seeds.sh:/usr/local/bin/run-seeds.sh:ro
     depends_on:
       migrate:
