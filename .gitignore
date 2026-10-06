@@ -37,3 +37,6 @@ reports/*
 
 # Local backups (database dumps) never go to git
 backups/
+
+# Real company configuration (names, addresses)
+config/staff.csv

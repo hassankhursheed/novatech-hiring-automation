@@ -130,6 +130,20 @@ Details in [docs/testing.md](docs/testing.md).
 | 5 | 42 fictional applications, scenario runner for the 23 mandatory scenarios, test report | **done**: [docs/scenario-report.md](docs/scenario-report.md) (23/23, 42/42) |
 | 6 | Mistral AI (screening, interview assessment, n8n interview questions), candidate email at every step, HR scorecard entry, testcontainers, Langfuse, DeepEval, CI, n8n 2.41.7 | **done** ([docs/ai-evaluation.md](docs/ai-evaluation.md)) |
 
+## Going live (this installation runs in production mode)
+
+| Setting | Where | Current |
+|---|---|---|
+| `APP_ENV=production` | `.env` | on: no demo login (staff sign in with a one-time link emailed to them), fault injection off, API docs hidden |
+| Staff | `config/staff.csv` ([config/README.md](config/README.md)) | role accounts on plus-addresses of the operator's mailbox; replace with the real team when it joins |
+| Outgoing email | n8n credential *NovaTech SMTP (outgoing email)* + `MAIL_FROM_ADDRESS` | real mailbox (Gmail SMTP) |
+| Error alerts | `OPS_ALERT_EMAIL` | operator's mailbox |
+| Test data | `sh scripts/purge-applications.sh` | removed; only real applications remain |
+
+After changing `.env` or `config/staff.csv`: `docker compose up -d seed` (configuration) and
+`docker compose up -d --build backend portal` (mode). Never run the scenario runner or the journey check on this
+installation: they create test applicants and send real email; use a separate test installation.
+
 ## Production notes
 
 * Single-tenant: one installation per company keeps candidate data isolated.
