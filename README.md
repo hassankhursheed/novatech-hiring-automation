@@ -46,7 +46,8 @@ docker compose --profile observability up -d
 * **Real email:** out of the box every email goes to the Mailpit test inbox. To reach candidates, edit the n8n
   credential *NovaTech SMTP (outgoing email)* (e.g. Gmail: `smtp.gmail.com`, port 465, SSL, an App password) and set
   `MAIL_FROM_ADDRESS` in `.env`.
-* **Mistral key in n8n:** `scripts\n8n-mistral-key.ps1`, or paste it into the credential *Mistral AI (n8n)*.
+* **Mistral key in n8n:** n8n has its own key: set `N8N_MISTRAL_API_KEY` in `.env` and run `scripts\n8n-mistral-key.ps1`
+  (or paste it into the credential *Mistral AI (n8n)*). The backend key is never used by n8n.
 
 Linux/macOS: `sh scripts/new-env.sh` then the same `docker compose` commands.
 

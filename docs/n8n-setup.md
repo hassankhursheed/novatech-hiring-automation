@@ -34,7 +34,7 @@ The workflows use four credentials. Names matter: the exported workflows referen
 | `NovaTech DB (n8n_app)` | Postgres | Host `db` · Port `5432` · Database `novatech` · User `n8n_app` · Password = `NOVATECH_N8N_DB_PASSWORD` from `.env` · SSL `disable` (local only) | you, once |
 | `NovaTech Backend API key` | Header Auth | Name `X-API-Key` · Value = the first key in `INTERNAL_API_KEYS` from `.env` | you, once |
 | `NovaTech SMTP (outgoing email)` | SMTP | Development: Host `mailpit` · Port `1025` · SSL/TLS off (test inbox). **Real email: see below.** | you |
-| `Mistral AI (n8n)` | Mistral Cloud | API key (WF-04 drafts interview questions with `ministral-8b-latest`) | `sh scripts/n8n-mistral-key.sh` or paste it in the UI |
+| `Mistral AI (n8n)` | Mistral Cloud | n8n's own key, `N8N_MISTRAL_API_KEY` (WF-04 drafts interview questions with `ministral-8b-latest`) | `sh scripts/n8n-mistral-key.sh` or paste it in the UI |
 
 ### Sending real email (Gmail)
 
@@ -57,9 +57,15 @@ Only SWF-02 sends email, so nothing else changes.
 
 ### Mistral key for n8n
 
-`scripts/n8n-mistral-key.sh` (Windows: `scripts\n8n-mistral-key.ps1`) copies `N8N_MISTRAL_API_KEY` from `.env`
-into the credential (falling back to `MISTRAL_API_KEY`). Or: n8n → Credentials → **Mistral AI (n8n)** → paste
-the key → Save. Without a key the interviewer brief is still sent, just without suggested questions.
+n8n has its own key, separate from the backend's: put it in `.env` as `N8N_MISTRAL_API_KEY`, then run
+`scripts/n8n-mistral-key.sh` (Windows: `scripts\n8n-mistral-key.ps1`). It copies only that key into the credential;
+the backend's `MISTRAL_API_KEY` is never used by n8n. Or: n8n → Credentials → **Mistral AI (n8n)** → paste the key →
+Save. Without a key the interviewer brief is still sent, just without suggested questions.
+
+**Model: `ministral-8b-latest`.** Two keys of the same Mistral account share one budget per model (measured: the
+remaining-requests counter drops for both keys together). The backend uses `ministral-14b-latest`, so n8n uses
+`ministral-8b-latest`, which has its own budget (188 requests/min on a free key) and never competes with screening.
+In a side-by-side test it also followed the brief best (it asked about exactly the skills missing at screening).
 
 The same `NovaTech Backend API key` credential also protects the operations webhooks n8n exposes to the backend
 (`/webhook/ops/kick`, `/webhook/ops/replay`, `/webhook/ops/notify`, `/webhook/ops/daily-report`, `/webhook/ops/onboarding-sweep`): callers must send the same `X-API-Key`.

@@ -1,6 +1,7 @@
 """Structured LLM client for Mistral AI, built on LangChain (langchain-mistralai).
 
-Configuration: LLM_PROVIDER=mistral, LLM_MODEL (default mistral-medium-latest), MISTRAL_API_KEY.
+Configuration: LLM_PROVIDER=mistral, LLM_MODEL (default ministral-14b-latest), MISTRAL_API_KEY (the backend's key;
+n8n has its own, N8N_MISTRAL_API_KEY).
 Output is requested as JSON that follows our schema (Mistral's native json_schema response format) and is then
 validated again by our own pydantic models before anything is stored.
 
