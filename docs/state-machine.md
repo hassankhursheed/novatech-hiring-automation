@@ -123,3 +123,25 @@ The brief invites justified improvements. These were needed to make every mandat
 
 Interviews and offers also have their own small lifecycles (`hiring.interviews.status`, `hiring.offers.status`),
 changed only by the same functions that move the application, so the two never disagree.
+
+## What the candidate receives at each step
+
+Every candidate-facing step sends exactly one email (SWF-02 dedupe). `application_statuses.candidate_informed`
+marks these steps; `candidate_notice` names the status update WF-02 sends where no other workflow emails the
+candidate. Internal steps (validation, scoring, internal reviews, offer approval) send nothing.
+
+| Status | Email to the candidate | Sent by |
+|---|---|---|
+| (submitted) | We received your application (or: duplicate / could not be processed) | WF-02 intake |
+| SCREENING_REVIEW | Your application is being reviewed (or: your interview invitation expired and is back with a recruiter) | WF-02 `NOTIFY_CANDIDATE` |
+| SHORTLISTED | Interview invitation with a personal link to choose a slot (+ one reminder) | WF-04 |
+| INTERVIEW_SCHEDULED | Interview confirmed: time, place, add-to-calendar | WF-04 |
+| INTERVIEWED | Thank you for interviewing; a decision follows | WF-02 `NOTIFY_CANDIDATE` |
+| SELECTED | Good news: you have been selected, the written offer is being prepared | WF-02 `NOTIFY_CANDIDATE` |
+| OFFERED | The offer with its letter (PDF) and a personal link to accept, decline or negotiate (+ reminders) | WF-05 |
+| NEGOTIATION | We received your message about your offer | WF-05 |
+| ACCEPTED → ONBOARDING | Welcome email with the first day and orientation | WF-06 |
+| ONBOARDED | Your onboarding is complete | WF-02 `NOTIFY_CANDIDATE` |
+| REJECTED | Rejection notice | WF-02 |
+| DECLINED / OFFER_EXPIRED | Thank you for letting us know / your offer has expired | WF-05 |
+| WITHDRAWN | Confirmation that the application was withdrawn | WF-02 `NOTIFY_CANDIDATE` |
