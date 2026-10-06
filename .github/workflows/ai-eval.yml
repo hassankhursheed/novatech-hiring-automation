@@ -1,0 +1,69 @@
+name: AI evaluation
+
+# DeepEval on the live Mistral model (backend/tests/ai_eval). It costs about 110 requests of the Mistral budget and
+# ~6 minutes, so it runs only when the AI changes, once a week (to catch model drift behind the "-latest" aliases)
+# and on demand (Actions -> AI evaluation -> Run workflow).
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/app/ai/**
+      - backend/app/domain/evaluation.py
+      - backend/app/domain/screening_policy.py
+      - backend/tests/ai_eval/**
+      - backend/pyproject.toml
+      - backend/uv.lock
+  schedule:
+    - cron: "0 4 * * 1"  # Mondays 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-eval
+  cancel-in-progress: false
+
+jobs:
+  deepeval:
+    name: DeepEval on the live Mistral model
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Repository secret MISTRAL_API_KEY (required); optional LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
+    # (a Langfuse reachable from GitHub, e.g. Langfuse Cloud) to also record an experiment run.
+    env:
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      LLM_MODEL: ${{ vars.LLM_MODEL || 'ministral-14b-latest' }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+      DEEPEVAL_TELEMETRY_OPT_OUT: "YES"
+      APP_ENV: test
+      SCENARIO_REPORT_DIR: reports
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Skipped without the MISTRAL_API_KEY secret
+        if: env.MISTRAL_API_KEY == ''
+        run: echo "Add the repository secret MISTRAL_API_KEY to run the AI evaluation."
+      - uses: actions/checkout@v7
+        if: env.MISTRAL_API_KEY != ''
+      - uses: astral-sh/setup-uv@v10.2.0
+        if: env.MISTRAL_API_KEY != ''
+        with:
+          version: "0.12.19"
+          python-version: "3.12"
+      - if: env.MISTRAL_API_KEY != ''
+        run: uv sync --frozen --group eval
+      - name: DeepEval assertions (safety per case, accuracy and groundedness gates over the dataset)
+        if: env.MISTRAL_API_KEY != ''
+        run: uv run deepeval test run tests/ai_eval -m ai_eval
+      - name: Langfuse experiment run (optional)
+        if: env.MISTRAL_API_KEY != '' && env.LANGFUSE_SECRET_KEY != '' && env.LANGFUSE_HOST != ''
+        run: uv run python -m tests.ai_eval.langfuse_experiment
+      - uses: actions/upload-artifact@v7
+        if: always() && env.MISTRAL_API_KEY != ''
+        with:
+          name: ai-eval-report
+          path: backend/reports/ai-eval.*
