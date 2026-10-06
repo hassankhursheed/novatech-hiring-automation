@@ -24,7 +24,19 @@ const MAX_MB = 5
 export default function Careers() {
   const positions = useQuery({ queryKey: ['positions'], queryFn: () => api<Position[]>('/v1/public/positions') })
   const [selected, setSelected] = useState<string>('')
-  const formRef = useRef<HTMLFormElement>(null)
+  const [submitted, setSubmitted] = useState<Submitted | null>(null)
+  const [formKey, setFormKey] = useState(0) // a new key gives a fresh form (and a fresh Idempotency-Key)
+  const applyRef = useRef<HTMLDivElement>(null)
+
+  // Apply always works: after one application is sent, it opens a new, empty form for the chosen position.
+  const startApplication = (code: string) => {
+    if (submitted) {
+      setSubmitted(null)
+      setFormKey((key) => key + 1)
+    }
+    setSelected(code)
+    requestAnimationFrame(() => applyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   return (
     <div className="space-y-10">
@@ -50,10 +62,7 @@ export default function Careers() {
             <Button
               variant="secondary"
               className="mt-4 w-full"
-              onClick={() => {
-                setSelected(p.code)
-                formRef.current?.scrollIntoView({ behavior: 'smooth' })
-              }}
+              onClick={() => startApplication(p.code)}
             >
               Apply
             </Button>
@@ -61,22 +70,42 @@ export default function Careers() {
         ))}
       </section>
 
-      <ApplicationForm formRef={formRef} positions={positions.data ?? []} selected={selected} onSelect={setSelected} />
+      <div id="apply" ref={applyRef} className="scroll-mt-24">
+        {submitted ? (
+          <Card title="Application received">
+            <Alert tone="success" title="Thank you for applying!">
+              Your reference is <span className="font-mono font-semibold">{submitted.correlation_id}</span>. A confirmation
+              email is on its way, and we will email you at every step of the process.
+            </Alert>
+            <Button variant="secondary" className="mt-4" onClick={() => startApplication('')}>Apply for another position</Button>
+          </Card>
+        ) : (
+          <ApplicationForm
+            key={formKey}
+            positions={positions.data ?? []}
+            selected={selected}
+            onSelect={setSelected}
+            onSubmitted={(result) => {
+              setSubmitted(result)
+              requestAnimationFrame(() => applyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+            }}
+          />
+        )}
+      </div>
     </div>
   )
 }
 
-function ApplicationForm({ formRef, positions, selected, onSelect }: {
-  formRef: React.RefObject<HTMLFormElement | null>
+function ApplicationForm({ positions, selected, onSelect, onSubmitted }: {
   positions: Position[]
   selected: string
   onSelect: (code: string) => void
+  onSubmitted: (result: Submitted) => void
 }) {
   // One key per filled-in form: a retry after a timeout reuses it, so the application can never be stored twice.
   const idempotencyKey = useRef(crypto.randomUUID())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<Submitted | null>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -114,7 +143,7 @@ function ApplicationForm({ formRef, positions, selected, onSelect }: {
         consent: form.get('consent') === 'on',
       }
       const result = await request<Submitted>(INTAKE_URL, { body, headers: { 'Idempotency-Key': idempotencyKey.current } })
-      setDone(result)
+      onSubmitted(result)
     } catch (err) {
       setError(err instanceof ApiError && err.code === 'IDEMPOTENCY_KEY_REUSED'
         ? 'This form was already submitted with different details. Please reload the page to start a new application.'
@@ -124,20 +153,9 @@ function ApplicationForm({ formRef, positions, selected, onSelect }: {
     }
   }
 
-  if (done) {
-    return (
-      <Card title="Application received">
-        <Alert tone="success" title="Thank you for applying!">
-          Your reference is <span className="font-mono font-semibold">{done.correlation_id}</span>. A confirmation email is on
-          its way, and we will contact you about the next steps.
-        </Alert>
-      </Card>
-    )
-  }
-
   return (
     <Card title="Apply">
-      <form id="apply" ref={formRef} onSubmit={submit} className="grid scroll-mt-24 gap-5 md:grid-cols-2" noValidate={false}>
+      <form onSubmit={submit} className="grid gap-5 md:grid-cols-2">
         <Field label="Position" required>
           <Select name="position" required value={selected} onChange={(e) => onSelect(e.target.value)}>
             <option value="" disabled>Choose a position</option>
