@@ -21,8 +21,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           version: "0.12.19"
           python-version: "3.12"
@@ -36,7 +36,7 @@ jobs:
           APP_ENV: test
           REQUIRE_DB_TESTS: "1"
         run: uv run pytest --cov=app --cov-report=term --cov-report=xml:coverage.xml --junitxml=junit.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-test-results
@@ -51,8 +51,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -64,8 +64,8 @@ jobs:
     name: n8n workflows - build and expression checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - run: node n8n/src/build.mjs
@@ -90,8 +90,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         if: env.MISTRAL_API_KEY != ''
         with:
           version: "0.12.19"
@@ -104,7 +104,7 @@ jobs:
       - name: Langfuse experiment run (optional)
         if: env.MISTRAL_API_KEY != '' && env.LANGFUSE_SECRET_KEY != ''
         run: uv run python -m tests.ai_eval.langfuse_experiment
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && env.MISTRAL_API_KEY != ''
         with:
           name: ai-eval-report

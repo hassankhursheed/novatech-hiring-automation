@@ -1,4 +1,9 @@
+import importlib.util
 import os
+
+# The AI evaluation (tests/ai_eval) needs the optional "eval" dependency group (DeepEval). Without it, pytest does not
+# even collect that folder, so the regular suite runs with the dev tools only (as in CI's backend job).
+collect_ignore_glob = [] if importlib.util.find_spec("deepeval") else ["ai_eval/*"]
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("INTERNAL_API_KEYS", "test-key-primary,test-key-rotated")
