@@ -34,3 +34,6 @@ Thumbs.db
 n8n/build/
 reports/*
 !reports/.gitkeep
+
+# Local backups (database dumps) never go to git
+backups/

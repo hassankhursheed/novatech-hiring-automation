@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend - lint, white-box tests, testcontainers, coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.19"
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - name: Lint and format
+        run: |
+          uv run ruff check app tests
+          uv run ruff format --check app tests
+      - name: Tests (unit, API, and database integration on a throwaway PostgreSQL via testcontainers)
+        env:
+          APP_ENV: test
+          REQUIRE_DB_TESTS: "1"
+        run: uv run pytest --cov=app --cov-report=term --cov-report=xml:coverage.xml --junitxml=junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: |
+            backend/coverage.xml
+            backend/junit.xml
+
+  portal:
+    name: Portal - type check and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  workflows:
+    name: n8n workflows - build and expression checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node n8n/src/build.mjs
+
+  ai-eval:
+    name: AI evaluation - DeepEval on the live Mistral model
+    needs: backend
+    runs-on: ubuntu-latest
+    # Uses the repository secrets MISTRAL_API_KEY (required) and, optionally, LANGFUSE_PUBLIC_KEY,
+    # LANGFUSE_SECRET_KEY and LANGFUSE_HOST to also record a Langfuse experiment run. Without the key the job is
+    # skipped (forked pull requests never see secrets).
+    env:
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      LLM_MODEL: ${{ vars.LLM_MODEL || 'ministral-14b-latest' }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+      DEEPEVAL_TELEMETRY_OPT_OUT: "YES"
+      APP_ENV: test
+      SCENARIO_REPORT_DIR: reports
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        if: env.MISTRAL_API_KEY != ''
+        with:
+          version: "0.12.19"
+          python-version: "3.12"
+      - if: env.MISTRAL_API_KEY != ''
+        run: uv sync --frozen --group eval
+      - name: DeepEval assertions (safety per case, accuracy gates over the dataset)
+        if: env.MISTRAL_API_KEY != ''
+        run: uv run deepeval test run tests/ai_eval -m ai_eval
+      - name: Langfuse experiment run (optional)
+        if: env.MISTRAL_API_KEY != '' && env.LANGFUSE_SECRET_KEY != ''
+        run: uv run python -m tests.ai_eval.langfuse_experiment
+      - uses: actions/upload-artifact@v4
+        if: always() && env.MISTRAL_API_KEY != ''
+        with:
+          name: ai-eval-report
+          path: backend/reports/ai-eval.*
+      - name: Skipped
+        if: env.MISTRAL_API_KEY == ''
+        run: echo "MISTRAL_API_KEY secret not set; AI evaluation skipped."

@@ -5,6 +5,7 @@
 #   docker compose logs -f backend n8n  follow logs
 #
 # Exposed on localhost only:  n8n  http://localhost:5678   |  API  http://localhost:8000/docs
+#                             Langfuse (optional: --profile observability)  http://localhost:3000
 #                             business DB  localhost:${BUSINESS_DB_PORT:-5433}
 name: novatech
 
@@ -71,6 +72,7 @@ services:
       DATABASE_URL: postgres://novatech_owner:${NOVATECH_OWNER_PASSWORD}@db:5432/novatech?sslmode=disable
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       DEMO_FAST_TIMERS: ${DEMO_FAST_TIMERS:-false}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
     volumes:
       - ./db/seed:/seed:ro
       - ./infra/seed/run-seeds.sh:/usr/local/bin/run-seeds.sh:ro
@@ -107,14 +109,12 @@ services:
       STAFF_DEMO_PASSWORD: ${STAFF_DEMO_PASSWORD:-}
       # Dispatcher kick + error replay webhooks (internal network; authenticated with the internal API key)
       N8N_BASE_URL: http://n8n:5678
-      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
-      LLM_MODEL: ${LLM_MODEL:-claude-opus-5}
+      LLM_PROVIDER: ${LLM_PROVIDER:-mistral}
+      LLM_MODEL: ${LLM_MODEL:-ministral-14b-latest}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
-      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-16000}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-2000}
+      LLM_REQUESTS_PER_SECOND: ${LLM_REQUESTS_PER_SECOND:-0.25}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
@@ -163,16 +163,33 @@ services:
       target: test
     environment:
       APP_ENV: test
-      DATABASE_URL_TEST: postgresql://backend_app:${NOVATECH_BACKEND_DB_PASSWORD}@db:5432/novatech
-      DATABASE_URL_OWNER_TEST: postgresql://novatech_owner:${NOVATECH_OWNER_PASSWORD}@db:5432/novatech
-      # Scenario runner (python -m tests.scenarios.run) drives the running stack and writes reports/
+      # Integration tests start a throwaway PostgreSQL per run (testcontainers) through the host's Docker engine,
+      # and reach it on the host's published port.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      REQUIRE_DB_TESTS: "1"
+      NOVATECH_DB_DIR: /db
+      # Scenario runner (python -m tests.scenarios.run) and journey check (python -m tests.scenarios.journey) drive
+      # the running stack. They create applications on the reserved test domain example.com.
       SCENARIO_API_KEY: ${INTERNAL_API_KEYS}  # first key is used; unit tests keep their own fake keys
+      SCENARIO_DATABASE_URL: postgresql://novatech_owner:${NOVATECH_OWNER_PASSWORD}@db:5432/novatech
       SCENARIO_REPORT_DIR: /app/reports
+      # AI evaluation (tests/ai_eval) with the live model; skipped while the key is empty
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-ministral-14b-latest}
+      LLM_REQUESTS_PER_SECOND: ${LLM_REQUESTS_PER_SECOND:-0.25}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
     volumes:
+      # The working tree is mounted, so the tests always run against the current code without a rebuild.
+      - ./backend/app:/app/app:ro
+      - ./backend/tests:/app/tests
+      - ./backend/pyproject.toml:/app/pyproject.toml:ro
       - ./reports:/app/reports
-    depends_on:
-      seed:
-        condition: service_completed_successfully
+      - ./db:/db:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [app]
     restart: "no"
 
@@ -196,7 +213,7 @@ services:
     networks: [n8n]
 
   n8n:
-    image: n8nio/n8n:${N8N_VERSION:-2.40.7}
+    image: n8nio/n8n:${N8N_VERSION:-2.41.7}
     <<: [*restart, *logging]
     environment:
       # Database (n8n's own state: workflows, credentials, executions)
@@ -248,7 +265,7 @@ services:
     networks: [n8n, app]
 
   n8n-runners:
-    image: n8nio/runners:${N8N_VERSION:-2.40.7}
+    image: n8nio/runners:${N8N_VERSION:-2.41.7}
     <<: [*restart, *logging]
     environment:
       N8N_RUNNERS_TASK_BROKER_URI: http://n8n:5679
@@ -276,9 +293,151 @@ services:
       - "127.0.0.1:8025:8025"
     networks: [app]
 
+  # ------------------------------------------------------------------------------------------
+  # Langfuse (optional, profile "observability"): a trace of every AI call (prompt, output, tokens, latency,
+  # grouped by correlation id) plus evaluation datasets and experiment runs. Self-hosted Langfuse v4:
+  #   docker compose --profile observability up -d       ->  http://localhost:3000
+  # Sign in with LANGFUSE_INIT_USER_EMAIL / LANGFUSE_INIT_USER_PASSWORD from .env. The project and its API keys
+  # (LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY, the same ones the backend uses) are created on first start.
+  # To use Langfuse Cloud instead, put its keys in .env and set LANGFUSE_HOST=https://cloud.langfuse.com.
+  # ------------------------------------------------------------------------------------------
+  langfuse-db:
+    profiles: ["observability"]
+    image: postgres:17-alpine
+    <<: [*restart, *logging]
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-}
+      POSTGRES_DB: langfuse
+      TZ: UTC
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [observability]
+
+  langfuse-clickhouse:
+    profiles: ["observability"]
+    image: clickhouse/clickhouse-server:25.12
+    <<: [*restart, *logging]
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [observability]
+
+  langfuse-minio:
+    profiles: ["observability"]
+    image: cgr.dev/chainguard/minio
+    <<: [*restart, *logging]
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD:-}
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [observability]
+
+  langfuse-redis:
+    profiles: ["observability"]
+    image: redis:7
+    <<: [*restart, *logging]
+    command: ["--requirepass", "${LANGFUSE_REDIS_PASSWORD:-}", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [observability]
+
+  langfuse-worker:
+    profiles: ["observability"]
+    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    <<: [*restart, *logging]
+    depends_on: &langfuse-deps
+      langfuse-db:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+    environment: &langfuse-env
+      NEXTAUTH_URL: http://localhost:3000
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-}@langfuse-db:5432/langfuse
+      SALT: ${LANGFUSE_SALT:-}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-}
+      TELEMETRY_ENABLED: "false"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:-}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:-}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_PASSWORD:-}
+    networks: [observability]
+
+  langfuse-web:
+    profiles: ["observability"]
+    image: docker.langfuse.com/langfuse/langfuse:4
+    <<: [*restart, *logging]
+    depends_on: *langfuse-deps
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-}
+      LANGFUSE_INIT_ORG_ID: novatech
+      LANGFUSE_INIT_ORG_NAME: NovaTech Solutions
+      LANGFUSE_INIT_PROJECT_ID: novatech-hiring
+      LANGFUSE_INIT_PROJECT_NAME: NovaTech Hiring AI
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-}
+      LANGFUSE_INIT_USER_NAME: NovaTech Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
+    networks: [observability, app]
+
 networks:
   app:
   n8n:
+  observability:
 
 volumes:
   db_data:
@@ -286,3 +445,8 @@ volumes:
   n8n_data:
   storage_data:
   mailpit_data:
+  langfuse_db_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+  langfuse_redis_data:
