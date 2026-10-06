@@ -107,7 +107,7 @@ docs/               architecture, database/ERD, state machine, workflows, reliab
 
 | Suite | Result |
 |---|---|
-| Backend: unit, API and database integration (white-box; PostgreSQL via testcontainers) | **242 passed**, 90 % line coverage, ruff clean |
+| Backend: unit, API and database integration (white-box; PostgreSQL via testcontainers) | **243 passed** (locally and in GitHub Actions), 90 % line coverage, ruff clean |
 | Journey: one applicant through all 7 steps on the running stack | **7/7 steps** with the AI off (human review paths) and with live Mistral (AI shortlist, AI interview assessment, AI interview questions); the candidate is emailed at every step, 0 errors |
 | Scenarios: the 23 brief scenarios + 42 applications | 23/23, 42/42 ([docs/scenario-report.md](docs/scenario-report.md)) |
 | AI evaluation (DeepEval, live Mistral `ministral-14b-latest`, 36 labelled cases) | 100 % valid output, 100 % acceptable recommendations, 100 % safety, 0 personal-data leaks ([docs/ai-evaluation.md](docs/ai-evaluation.md)) |
