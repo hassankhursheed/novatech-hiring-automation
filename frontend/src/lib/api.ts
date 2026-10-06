@@ -78,6 +78,8 @@ export function explain(error: unknown): string {
     LINK_INVALID: 'This link is not valid. Please use the latest link from your email.',
     LINK_TOKEN_MISSING: MISSING_LINK,
     LINK_ALREADY_USED: 'This sign-in link was already used. Request a new one below.',
+    CV_UNSUPPORTED: 'We could not read your CV. Please upload a PDF with selectable text, or a Word (.docx) file.',
+    CV_EMPTY: 'The CV file is empty. Please choose your CV again.',
     SLOT_UNAVAILABLE: 'Someone just booked that slot. Please choose another one.',
     STAFF_AUTH_REQUIRED: 'Please sign in.',
     NETWORK_ERROR: error.message,
