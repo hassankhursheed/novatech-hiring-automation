@@ -1,0 +1,38 @@
+# HTTPS entry point of a server installation (deploy/docker-compose.prod.yml). Caddy obtains and renews the
+# Let's Encrypt certificates on its own. Only three things are public:
+#   PORTAL_DOMAIN  careers page, candidate and staff pages (React portal)
+#   API_DOMAIN     backend API used by the portal
+#   N8N_DOMAIN     n8n webhooks only (the application form posts here); the n8n editor is NOT public:
+#                  reach it through an SSH tunnel (docs/deploy-oracle.md)
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
+
+{$PORTAL_DOMAIN} {
+	import common
+	reverse_proxy portal:8080
+}
+
+{$API_DOMAIN} {
+	import common
+	reverse_proxy backend:8000
+}
+
+{$N8N_DOMAIN} {
+	import common
+	@public path /webhook/* /healthz
+	handle @public {
+		reverse_proxy n8n:5678
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

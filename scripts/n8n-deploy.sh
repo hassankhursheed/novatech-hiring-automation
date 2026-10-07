@@ -11,6 +11,10 @@ set -eu
 export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")/.."
 
+# The application form may only be posted from the portal's own address (WF-01); servers set PORTAL_PUBLIC_URL.
+portal_url=$(grep -E '^PORTAL_PUBLIC_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r"' || true)
+export INTAKE_ALLOWED_ORIGINS="${portal_url%/}"
+
 if [ "${1:-}" = "--exported" ]; then
   src=n8n/workflows
 else

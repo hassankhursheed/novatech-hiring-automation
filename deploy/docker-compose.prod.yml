@@ -1,0 +1,44 @@
+# Server overlay for docker-compose.yml. deploy/configure.sh sets COMPOSE_FILE in .env, so every
+# `docker compose ...` command on the server uses both files automatically.
+#
+# Adds the HTTPS entry point (Caddy, ports 80/443) and leaves everything else bound to 127.0.0.1 on the server:
+# the n8n editor, Langfuse and the databases are reached through an SSH tunnel, never from the internet.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:?set PORTAL_DOMAIN in .env}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+      N8N_DOMAIN: ${N8N_DOMAIN:?set N8N_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - portal
+      - backend
+      - n8n
+    networks: [app]
+
+  # n8n sits behind one proxy (Caddy): trust its X-Forwarded-* headers for client IPs and rate limits.
+  n8n:
+    environment:
+      N8N_PROXY_HOPS: "1"
+
+  # The test inbox is for development only; a server sends through the real SMTP account.
+  mailpit:
+    profiles: ["dev"]
+
+volumes:
+  caddy_data:
+  caddy_config:
