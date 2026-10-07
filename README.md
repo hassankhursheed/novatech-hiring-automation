@@ -88,6 +88,7 @@ n8n/workflows/      exported n8n workflows (version-controlled, no credentials)
 n8n/src/            workflow-as-code (WF-00, WF-02, WF-04..WF-09; notes for all) and the build (node n8n/src/build.mjs)
 scripts/            .env generator, n8n deploy / export, n8n Mistral key, test-data cleanup
 db/maintenance/     purge_applications.sql (used by scripts/purge-applications)
+deploy/             server installation: HTTPS proxy (Caddy), setup/configure/start scripts, backups
 .github/workflows/  CI (lint, tests with testcontainers + coverage, portal and workflow builds) and the AI evaluation
 docs/               architecture, database/ERD, state machine, workflows, reliability, configuration, n8n setup
 ```
@@ -104,6 +105,7 @@ docs/               architecture, database/ERD, state machine, workflows, reliab
 | [docs/configuration.md](docs/configuration.md) | Environment variables, business settings, scoring rules |
 | [docs/n8n-setup.md](docs/n8n-setup.md) | First login, credentials, conventions, deploy/export, hardening |
 | [docs/testing.md](docs/testing.md) | Test layers (unit, API, testcontainers, journey, scenarios, CI), map of the 23 scenarios |
+| [docs/deploy-oracle.md](docs/deploy-oracle.md) | Step-by-step deployment on a free Oracle Cloud server: HTTPS, SSH tunnel, backups |
 | [docs/ai-evaluation.md](docs/ai-evaluation.md) | Mistral models and limits, Langfuse tracing, DeepEval + Langfuse evaluation, results |
 | [docs/scenario-report.md](docs/scenario-report.md) | Latest end-to-end run: 23 scenarios + 42 fictional applications, with evidence |
 

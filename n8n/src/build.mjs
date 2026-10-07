@@ -32,6 +32,13 @@ const EXPORTED = {
 // company.careers_email) instead of a fixed address, so switching to a real mailbox is configuration only.
 const SMTP = { smtp: { id: 'ntMailpitSmtp001', name: 'NovaTech SMTP (outgoing email)' } };
 const PATCHES = {
+  // WF-01: browsers may post the application form only from the portal's own origin. On a server the deploy script
+  // passes INTAKE_ALLOWED_ORIGINS (the public portal address); locally it stays http://localhost:5173.
+  'WF-01': (wf) => {
+    const hook = wf.nodes.find((n) => n.type === 'n8n-nodes-base.webhook');
+    hook.parameters.options = { ...hook.parameters.options, allowedOrigins: process.env.INTAKE_ALLOWED_ORIGINS || 'http://localhost:5173' };
+    return wf;
+  },
   'SWF-02': (wf) => {
     const claim = wf.nodes.find((n) => n.name === 'Claim Notification');
     const base = 'SELECT * FROM api.begin_notification($1, $2, $3, $4, NULLIF($5, \'\')::uuid, $6, $7, $8::jsonb)';

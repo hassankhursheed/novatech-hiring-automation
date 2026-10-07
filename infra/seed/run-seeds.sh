@@ -5,6 +5,7 @@
 #   /config/staff.csv      -> the real staff (config/README.md); replaces the sample staff by id
 #   MAIL_FROM_ADDRESS=...  -> the mailbox that sends candidate email (company.careers_email); must match the SMTP login
 #   OPS_ALERT_EMAIL=...    -> where automation error digests go (ops.alert_email)
+#   PORTAL_PUBLIC_URL=...  -> the portal's public address, used in every link in every email (company.portal_url)
 #   APP_ENV, FAULT_INJECTION_ENABLED -> dev.fault_injection_enabled is only ever on outside production
 set -eu
 
@@ -53,6 +54,10 @@ EOSQL
 if [ -n "${MAIL_FROM_ADDRESS:-}" ]; then
   echo "seed: sender address set from MAIL_FROM_ADDRESS"
   set_text company.careers_email "$MAIL_FROM_ADDRESS" MAIL_FROM_ADDRESS
+fi
+if [ -n "${PORTAL_PUBLIC_URL:-}" ]; then
+  echo "seed: portal address set from PORTAL_PUBLIC_URL"
+  set_text company.portal_url "${PORTAL_PUBLIC_URL%/}" PORTAL_PUBLIC_URL
 fi
 if [ -n "${OPS_ALERT_EMAIL:-}" ]; then
   echo "seed: alert address set from OPS_ALERT_EMAIL"
