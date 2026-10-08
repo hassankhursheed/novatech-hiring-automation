@@ -1,0 +1,53 @@
+# Share the system running on this PC through a free Cloudflare quick tunnel (no account, no domain, no card).
+#
+#   Turn on:  set COMPOSE_FILE in .env (see docs/share-with-cloudflare-tunnel.md), then: docker compose up -d --build
+#   Link:     docker compose logs tunnel-url
+#
+# One public https://<words>.trycloudflare.com address serves the careers page, the HR portal, the API and the
+# application form (deploy/Caddyfile.tunnel routes by path). The n8n editor, Langfuse and the databases stay local.
+# The address changes when the tunnel restarts; tunnel-url keeps the links in emails pointing at the current one.
+services:
+  edge:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/Caddyfile.tunnel:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8080:8080"   # the same single-address setup, locally: http://localhost:8080
+    depends_on:
+      - portal
+      - backend
+      - n8n
+    networks: [app]
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "--url", "http://edge:8080"]
+    depends_on:
+      - edge
+    networks: [app]
+
+  tunnel-url:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/usr/local/bin/tunnel-url-sync.sh"]
+    environment:
+      DATABASE_URL: postgres://novatech_owner:${NOVATECH_OWNER_PASSWORD}@db:5432/novatech?sslmode=disable
+    volumes:
+      - ./deploy/tunnel-url-sync.sh:/usr/local/bin/tunnel-url-sync.sh:ro
+    depends_on:
+      - tunnel
+      - db
+    networks: [app]
+
+  # The portal calls the API and the form webhook on its own address (relative URLs), so it works under any
+  # tunnel address without a rebuild; the Content-Security-Policy then only needs 'self'.
+  portal:
+    build:
+      args:
+        VITE_API_URL: ""
+        VITE_INTAKE_URL: /webhook/applications
+        VITE_DEV_MAILBOX_URL: ""
+    environment:
+      PORTAL_CONNECT_SRC: ""
