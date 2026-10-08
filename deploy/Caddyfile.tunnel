@@ -1,0 +1,32 @@
+# One address for everything, used by the Cloudflare Tunnel setup (deploy/docker-compose.tunnel.yml).
+# Cloudflare terminates HTTPS; this proxy routes by path on plain HTTP inside Docker:
+#   /v1/*, /health/*   backend API
+#   /webhook/*         n8n webhooks (the application form)
+#   everything else    the portal (careers page, candidate and staff pages)
+# The n8n editor, Langfuse and the databases are not routed: they stay on this PC only.
+{
+	admin off
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:8080 {
+	encode zstd gzip
+	header -Server
+
+	@api path /v1/* /health /health/*
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	@webhooks path /webhook/*
+	handle @webhooks {
+		reverse_proxy n8n:5678
+	}
+
+	handle {
+		reverse_proxy portal:8080
+	}
+}
