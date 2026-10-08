@@ -16,6 +16,10 @@ Only on your PC: n8n editor http://localhost:5678 · Langfuse http://localhost:3
   Docker restart). New emails always use the current address (the `tunnel-url` helper updates it within 15 seconds);
   links in emails sent before a change stop working. For a permanent address, use a server
   ([deploy-oracle.md](deploy-oracle.md)) or a named Cloudflare Tunnel with your own domain.
+* If your internet drops for a while, Cloudflare deletes the quick tunnel. The `tunnel` service notices (no
+  connection to Cloudflare for 2 minutes, see `deploy/tunnel/watchdog.sh`), restarts itself and gets a new address,
+  so the system comes back on its own once the connection is back; check the new link with
+  `docker compose logs tunnel-url`.
 * Cloudflare describes quick tunnels as a testing tool: no uptime guarantee, up to 200 requests at the same moment.
 
 ## Turn it on

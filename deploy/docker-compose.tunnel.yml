@@ -20,10 +20,22 @@ services:
       - n8n
     networks: [app]
 
+  # cloudflared with a watchdog (deploy/tunnel/watchdog.sh): after a network drop Cloudflare deletes a quick tunnel,
+  # so the container restarts itself and gets a new address instead of retrying the deleted one forever.
   tunnel:
-    image: cloudflare/cloudflared:2026.10.0
+    build:
+      context: ./deploy/tunnel
+    image: novatech-tunnel:2026.10.0
     restart: unless-stopped
-    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "--url", "http://edge:8080"]
+    environment:
+      TUNNEL_ORIGIN: http://edge:8080
+      TUNNEL_READY_GRACE_SECONDS: "120"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:2000/ready"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     depends_on:
       - edge
     networks: [app]
