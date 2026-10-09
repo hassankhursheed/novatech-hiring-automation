@@ -7,7 +7,8 @@
 --   scope=all             every application and every operational record: a clean start before go-live.
 --
 -- Configuration, staff, positions, scoring rules, onboarding templates and interview slots always stay; slots that
--- were booked by removed interviews are opened again. Application codes are never reused.
+-- were booked by removed interviews are opened again. Application codes are never reused. The stored CV and offer
+-- letter files are removed by scripts/purge-applications.sh afterwards (the database cannot reach them).
 --
 -- Run with scripts/purge-applications.sh (dry run first, a backup, then confirmation). Runs in ONE transaction as the
 -- database owner; the append-only guards are lifted only inside that transaction, so a failure leaves everything as
@@ -148,6 +149,9 @@ INSERT INTO purge_report SELECT 'AI interview assessments', count(*) FROM d;
 
 WITH d AS (DELETE FROM hiring.interviews i WHERE i.application_id IN (SELECT id FROM purge_app) RETURNING 1)
 INSERT INTO purge_report SELECT 'interviews', count(*) FROM d;
+
+WITH d AS (DELETE FROM hiring.interview_meeting_plans m WHERE m.application_id IN (SELECT id FROM purge_app) RETURNING 1)
+INSERT INTO purge_report SELECT 'interview meeting details', count(*) FROM d;
 
 WITH u AS (UPDATE hiring.interview_slots s SET status = 'OPEN'
             WHERE s.id IN (SELECT id FROM purge_slot) AND s.status = 'BOOKED'
