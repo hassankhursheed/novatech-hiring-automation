@@ -352,6 +352,16 @@ class FakeHiringRepo:
         self.calls.append(("transition", (application_id, to_status, reason, ctx, expected)))
         return {"application_id": application_id, "to_status": to_status, "changed": True}
 
+    async def set_meeting(self, application_id: str, meeting: dict[str, Any], ctx: Row) -> Row:
+        self.calls.append(("set_meeting", (application_id, meeting, ctx)))
+        return {
+            "application_id": application_id,
+            "interview_id": INTERVIEW_ID,
+            "interview_status": "CONFIRMED",
+            "changed": True,
+            "candidate_notified": True,
+        }
+
     async def staff_exists(self, staff_id: str) -> bool:
         return staff_id in self.active_staff
 

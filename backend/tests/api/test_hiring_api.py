@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.ai.prompts import INTERVIEW_PROMPT_VERSION
@@ -187,6 +188,41 @@ def test_staff_endpoints_need_key_and_known_staff(client: TestClient, hiring_rep
     assert unknown.status_code == 401 and unknown.json()["code"] == "UNKNOWN_STAFF_ACTOR"
     ok = client.post(url, json=body, headers={**HEADERS, "X-Staff-Id": HR_ID})
     assert ok.status_code == 200 and hiring_repo.calls[-1][1][3]["actor_id"] == HR_ID
+
+
+def test_shortlisting_saves_the_meeting_first(client: TestClient, hiring_repo: FakeHiringRepo) -> None:
+    meeting = {"meeting_url": "https://zoom.us/j/123", "meeting_id": "123 456 7890", "meeting_passcode": "ab12"}
+    body = {"to_status": "SHORTLISTED", "reason": "strong portfolio", "meeting": meeting}
+    url = f"/v1/staff/applications/{APP_ID}/transition"
+    assert client.post(url, json=body, headers={**HEADERS, "X-Staff-Id": HR_ID}).status_code == 200
+    (saved, saved_args), (moved, _) = hiring_repo.calls[-2:]
+    assert saved == "set_meeting" and moved == "transition"
+    assert saved_args[1] == {**meeting, "mode": "ONLINE", "meeting_notes": None}
+
+
+@pytest.mark.parametrize(
+    "meeting",
+    [
+        {"mode": "ONLINE", "meeting_id": "123"},  # no link
+        {"mode": "ONLINE", "meeting_url": "zoom.us/j/123"},  # not a URL
+        {"mode": "ONSITE", "meeting_url": "https://zoom.us/j/1"},  # no address or instructions
+        {"mode": "PHONE", "meeting_notes": "call me"},
+    ],
+)
+def test_incomplete_meeting_details_are_rejected(client: TestClient, meeting: dict[str, str]) -> None:
+    url = f"/v1/staff/applications/{APP_ID}/meeting"
+    assert client.post(url, json=meeting, headers={**HEADERS, "X-Staff-Id": HR_ID}).status_code == 422
+
+
+def test_changing_the_meeting_of_a_booked_interview_notifies_the_candidate(
+    client: TestClient, hiring_repo: FakeHiringRepo, n8n: FakeN8n
+) -> None:
+    body = {"mode": "ONSITE", "meeting_notes": "Office 4, Main Boulevard, Lahore. Ask for HR at reception."}
+    response = client.post(
+        f"/v1/staff/applications/{APP_ID}/meeting", json=body, headers={**HEADERS, "X-Staff-Id": HR_ID}
+    )
+    assert response.status_code == 200 and response.json()["candidate_notified"] is True
+    assert hiring_repo.calls[-1][1][1]["meeting_url"] is None and n8n.kicks == ["interview meeting changed"]
 
 
 def test_staff_revises_offer_and_reads_queues(client: TestClient, hiring_repo: FakeHiringRepo, n8n: FakeN8n) -> None:

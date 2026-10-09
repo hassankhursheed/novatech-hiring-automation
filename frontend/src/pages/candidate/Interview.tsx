@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Narrow } from '../../components/layout'
+import { MeetingSummary } from '../../components/meeting'
 import { Alert, Button, Card, Field, KeyValue, Loading, StatusBadge, Textarea, cx } from '../../components/ui'
 import { api, explain, MISSING_LINK } from '../../lib/api'
 import { TIMEZONE } from '../../lib/config'
@@ -16,6 +17,9 @@ interface InterviewView {
   scheduled_start: string | null
   scheduled_end: string | null
   meeting_url: string | null
+  meeting_id: string | null
+  meeting_passcode: string | null
+  meeting_notes: string | null
   application_code: string
   first_name: string
   position_title: string
@@ -26,6 +30,8 @@ interface InterviewView {
 
 const dayFormat = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, weekday: 'long', day: 'numeric', month: 'long' })
 const timeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, hour: 'numeric', minute: '2-digit', hour12: true })
+// The deadline is midnight in the company timezone: every offered time is on a day before it.
+const deadlineFormat = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 export default function Interview() {
   const token = useLinkToken('interview')
@@ -65,7 +71,7 @@ export default function Interview() {
     >
       {iv.status === 'INVITED' && (
         <Card title="Choose a time">
-          {iv.respond_by && <p className="mb-4 text-sm text-slate-600">Please choose before <strong>{formatDateTime(iv.respond_by)}</strong>.</p>}
+          {iv.respond_by && <p className="mb-4 text-sm text-slate-600">Please choose a time before <strong>{deadlineFormat.format(new Date(iv.respond_by))}</strong>. The meeting details are emailed to you as soon as you book.</p>}
           {iv.slots.length === 0 && <Alert tone="warning">No open times are left. The recruitment team will contact you.</Alert>}
           <div className="space-y-4">
             {Object.entries(byDay).map(([day, slots]) => (
@@ -97,9 +103,9 @@ export default function Interview() {
           <Card title="Details">
             <KeyValue items={[
               ['When', formatDateTime(iv.scheduled_start)],
-              ['Format', humanize(iv.mode)],
+              ['Format', iv.mode === 'ONSITE' ? 'At the office' : 'Online'],
               ['Interviewer', iv.interviewer_name],
-              ['Meeting link', iv.meeting_url ? <a className="text-brand-700 underline" href={iv.meeting_url}>{iv.meeting_url}</a> : 'Will follow by email'],
+              [iv.mode === 'ONSITE' ? 'Where' : 'How to join', <MeetingSummary key="meeting" meeting={iv} missing="We will email you the meeting details before the interview." />],
             ]} />
           </Card>
           <Card title="Can't make it?">

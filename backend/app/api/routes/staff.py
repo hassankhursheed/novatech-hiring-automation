@@ -16,6 +16,7 @@ from app.domain.hiring_contracts import (
     ApprovalRequest,
     CancelRequest,
     FeedbackRequest,
+    MeetingDetails,
     OfferTerms,
     TransitionRequest,
 )
@@ -66,9 +67,26 @@ async def transition_application(
     repo: HiringRepository = Depends(get_hiring_repo),
     n8n: N8nClient = Depends(get_n8n),
 ) -> dict[str, Any]:
+    if body.meeting is not None:  # saved first: the database requires a meeting before staff can shortlist
+        await repo.set_meeting(application_id, body.meeting.model_dump(mode="json"), ctx)
     row = await repo.transition(application_id, body.to_status, body.reason, ctx, body.expected_from)
     if row["changed"]:
         background.add_task(n8n.kick, f"staff moved application to {body.to_status}")
+    return dict(row)
+
+
+@router.post("/applications/{application_id}/meeting", summary="Set the interview meeting (link, ID, passcode)")
+async def set_interview_meeting(
+    body: MeetingDetails,
+    background: BackgroundTasks,
+    application_id: UuidPath,
+    ctx: Ctx = Depends(staff_ctx),
+    repo: HiringRepository = Depends(get_hiring_repo),
+    n8n: N8nClient = Depends(get_n8n),
+) -> dict[str, Any]:
+    row = await repo.set_meeting(application_id, body.model_dump(mode="json"), ctx)
+    if row["candidate_notified"]:
+        background.add_task(n8n.kick, "interview meeting changed")
     return dict(row)
 
 
@@ -243,9 +261,9 @@ async def applications(
 
 @router.get("/applications/{application_id}", summary="Everything about one application, with its full timeline")
 async def application_detail(
-    application_id: UuidPath, _: Ctx = Depends(staff_ctx), directory: StaffDirectory = Depends(get_staff_directory)
+    application_id: UuidPath, ctx: Ctx = Depends(staff_ctx), directory: StaffDirectory = Depends(get_staff_directory)
 ) -> dict[str, Any]:
-    return await directory.application_detail(application_id)
+    return await directory.application_detail(application_id, ctx["actor_id"])
 
 
 @router.get("/onboarding", summary="Employees currently onboarding, with their tasks")

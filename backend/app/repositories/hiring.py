@@ -35,16 +35,23 @@ class HiringRepository:
 
     # ---- interviews -----------------------------------------------------------------------------------
     async def interview_for_candidate(self, interview_id: str, candidate_id: str) -> dict[str, Any]:
+        # Meeting details are only shown once the candidate has booked a time.
         row = await self._db.fetch_one(
             """SELECT i.id::text AS interview_id, i.interview_code, i.round, i.status, i.mode,
-                      i.scheduled_start, i.scheduled_end, i.meeting_url, a.application_code,
+                      i.scheduled_start, i.scheduled_end, a.application_code,
+                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_url END AS meeting_url,
+                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_id END AS meeting_id,
+                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_passcode END
+                        AS meeting_passcode,
+                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_notes END AS meeting_notes,
                       a.status AS application_status,
                       c.id::text AS candidate_id, split_part(c.full_name, ' ', 1) AS first_name,
                       p.title AS position_title, s.full_name AS interviewer_name,
-                      (SELECT sa.run_at FROM ops.scheduled_actions sa
-                        WHERE sa.entity_id = i.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY'
-                          AND sa.status = 'PENDING'
-                        ORDER BY sa.run_at LIMIT 1) AS respond_by
+                      coalesce(i.respond_by,
+                               (SELECT sa.run_at FROM ops.scheduled_actions sa
+                                 WHERE sa.entity_id = i.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY'
+                                   AND sa.status = 'PENDING'
+                                 ORDER BY sa.run_at LIMIT 1)) AS respond_by
                  FROM hiring.interviews i
                  JOIN hiring.applications a ON a.id = i.application_id
                  JOIN hiring.candidates c ON c.id = a.candidate_id
@@ -60,7 +67,7 @@ class HiringRepository:
         view["slots"] = (
             [
                 dict(r)
-                for r in await self._db.fetch_all("SELECT * FROM api.interview_slot_options(%s, 12)", (interview_id,))
+                for r in await self._db.fetch_all("SELECT * FROM api.interview_slot_options(%s, 50)", (interview_id,))
             ]
             if row["status"] == "INVITED"
             else []
@@ -231,6 +238,9 @@ class HiringRepository:
             expected,
         )
 
+    async def set_meeting(self, application_id: str, meeting: dict[str, Any], ctx: Ctx) -> DictRow:
+        return await self._one("SELECT * FROM api.set_interview_meeting(%s, %s, %s)", application_id, meeting, ctx)
+
     async def withdraw(self, application_id: str, reason: str, ctx: Ctx) -> DictRow:
         return await self._one("SELECT * FROM api.withdraw_application(%s, %s, %s)", application_id, reason, ctx)
 
@@ -319,7 +329,7 @@ class StaffDirectory:
         )
         return [dict(r) for r in rows]
 
-    async def application_detail(self, application_id: str) -> dict[str, Any]:
+    async def application_detail(self, application_id: str, staff_id: str) -> dict[str, Any]:
         snapshot = await self._db.fetch_one("SELECT api.application_snapshot(%s::uuid) AS s", (application_id,))
         if snapshot is None or snapshot["s"] is None:
             raise NotFoundError("application not found", code="APPLICATION_NOT_FOUND")
@@ -402,6 +412,16 @@ class StaffDirectory:
                 (application_id,),
             )
         ]
+        plan = await self._db.fetch_one(
+            """SELECT mode, meeting_url, meeting_id, meeting_passcode, meeting_notes, updated_at
+                 FROM hiring.interview_meeting_plans WHERE application_id = %s""",
+            (application_id,),
+        )
+        app["meeting_plan"] = dict(plan) if plan else None
+        permissions = await self._db.fetch_one(
+            "SELECT api.staff_permissions(%s::uuid, %s) AS p", (application_id, staff_id)
+        )
+        app["permissions"] = permissions["p"] if permissions else {}
         app["staff_transitions"] = [
             dict(r)
             for r in await many(

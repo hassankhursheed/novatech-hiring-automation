@@ -80,8 +80,15 @@ export function explain(error: unknown): string {
     LINK_ALREADY_USED: 'This sign-in link was already used. Request a new one below.',
     CV_UNSUPPORTED: 'We could not read your CV. Please upload a PDF with selectable text, or a Word (.docx) file.',
     CV_EMPTY: 'The CV file is empty. Please choose your CV again.',
-    SLOT_UNAVAILABLE: 'Someone just booked that slot. Please choose another one.',
+    SLOT_UNAVAILABLE: 'That time is no longer available. Please choose another one.',
     STAFF_AUTH_REQUIRED: 'Please sign in.',
+    MEETING_DETAILS_REQUIRED: 'Enter the interview meeting details (link, meeting ID and passcode, or the office address) before shortlisting.',
+    MEETING_LINK_REQUIRED: 'An online interview needs the full meeting link, starting with https://.',
+    MEETING_LOCATION_REQUIRED: 'An interview at the office needs the address and instructions.',
+    NOT_ALLOWED_FOR_ROLE: 'Only HR, the recruiters and the hiring manager of this position can do this.',
+    NOT_THE_DEPARTMENT_APPROVER: "This offer is approved by its department's approver.",
+    SELF_APPROVAL_FORBIDDEN: 'You drafted this offer, so another approver has to approve it.',
+    SEGREGATION_OF_DUTIES: 'You already approved another level of this offer; another approver has to approve this one.',
     NETWORK_ERROR: error.message,
   }
   return messages[error.code] ?? error.message

@@ -185,7 +185,10 @@ Operational tables without foreign keys to the domain (by design, so they can lo
 | One employee per offer / candidate / application | `employees.offer_id`, `candidate_id`, `application_id` unique |
 | One booking per interview slot; no overlapping slots | `interviews_one_booking_per_slot_uq`, `interview_slots_no_overlap` (GiST exclusion) |
 | One interview per application round | `interviews_round_uq (application_id, round)` |
-| One approval per level; an approver approves only once per offer | `offer_approvals_level_uq`, `offer_approvals_approver_uq` |
+| One approval per level | `offer_approvals_level_uq` |
+| Offer approvers: level 1 from the offer's department, not the drafter, a different person per level (waived and audited only when nobody else can approve) | `hiring.offer_approver_ids`, `api.decide_offer_approval` |
+| Staff decisions only by HR admins, recruiters and the position's hiring manager | `hiring.assert_staff_may_manage` |
+| Interview slots only before the response deadline | `api.interview_slot_options`, `api.confirm_interview_slot` (`interviews.respond_by`) |
 | A rejection needs a reason | `offer_approvals` CHECK |
 | AI scores within 0-10 | `ai_analyses` CHECKs |
 | Status changes only through the state machine | `applications_status_guard` trigger |

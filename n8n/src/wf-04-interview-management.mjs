@@ -6,19 +6,24 @@ import {
 
 export default function build() {
   const w = new Workflow('WF-04',
-    'WF-04: interview invitations (signed slot links), reminders, expiry, calendar + confirmation, interviewer scorecard links, feedback reminders/escalation and post-interview evaluation (30/70 weighted, configurable).');
+    'WF-04: interview invitations (signed slot links, slots before the response deadline), reminders, expiry, confirmation with the meeting details, interviewer brief and scorecard links, meeting-detail updates, feedback reminders/escalation and post-interview evaluation (30/70 weighted, configurable).');
   const CTX = '$("Build Context").first().json.ctx';
   const S = '$("Start Log & Load State").first().json';
   const H = `${ESC} ${LAYOUT} ${FMT}`;
+  // The response deadline is midnight (company timezone); slots are only offered on the days before it.
+  const DAY = 'const day = (iso, tz) => DateTime.fromISO(String(iso)).setZone(tz || "Asia/Karachi").toFormat("cccc d LLLL yyyy");';
+  // How the candidate joins: link, meeting ID and passcode (online) or the address/instructions (on site).
+  const MEET = 'const meeting = (iv, missing) => iv.mode === "ONSITE" ? "On site: " + esc(iv.meeting_notes || "") : (iv.meeting_url ? "Online: <a href=\'" + esc(iv.meeting_url) + "\'>" + esc(iv.meeting_url) + "</a>" + (iv.meeting_id ? "<br/>Meeting ID: <b>" + esc(iv.meeting_id) + "</b>" : "") + (iv.meeting_passcode ? "<br/>Passcode: <b>" + esc(iv.meeting_passcode) + "</b>" : "") + (iv.meeting_notes ? "<br/>" + esc(iv.meeting_notes) : "") : missing);';
 
   w.add(execTrigger('When Called by Dispatcher', [['action', 'object']]));
   w.add(handlerContext('WF-04'));
   w.add(pg('Start Log & Load State', `SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', $2, $3) AS run_id,
        api.application_snapshot(coalesce(NULLIF($4, '')::uuid, iv.application_id)) AS app,
        iv.snapshot AS interview,
-       (SELECT sa.run_at FROM ops.scheduled_actions sa
-         WHERE sa.entity_id = iv.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY' AND sa.status IN ('PENDING', 'RUNNING')
-         ORDER BY sa.run_at LIMIT 1) AS invite_expires_at,
+       coalesce((iv.snapshot->>'respond_by')::timestamptz,
+                (SELECT sa.run_at FROM ops.scheduled_actions sa
+                  WHERE sa.entity_id = iv.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY' AND sa.status IN ('PENDING', 'RUNNING')
+                  ORDER BY sa.run_at LIMIT 1)) AS invite_expires_at,
        api.test_directive($5) AS fault_inject,
        (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone') AS timezone,
        (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s
@@ -40,12 +45,13 @@ export default function build() {
   [`JSON.stringify($json.ctx)`, '$json.entity_type', '$json.entity_id', '$json.application_id', '$json.ctx.correlation_id']));
   w.add(route('Route by Action Type', '$("Build Context").first().json.action.action_type', [
     'INVITE_TO_INTERVIEW', 'INTERVIEW_INVITE_REMINDER', 'INTERVIEW_INVITE_EXPIRY', 'FINALIZE_INTERVIEW_BOOKING',
-    'FEEDBACK_REMINDER', 'FEEDBACK_ESCALATION', 'EVALUATE_INTERVIEW',
+    'FEEDBACK_REMINDER', 'FEEDBACK_ESCALATION', 'EVALUATE_INTERVIEW', 'SEND_MEETING_DETAILS',
   ]));
   w.chain('When Called by Dispatcher', 'Build Context', 'Start Log & Load State', 'Route by Action Type');
 
   const EMAILS = ['Send Invitation (SWF-02)', 'Send Invitation Reminder (SWF-02)', 'Confirm to Candidate (SWF-02)',
-    'Brief Interviewer (SWF-02)', 'Remind Interviewer (SWF-02)', 'Escalate to HR (SWF-02)'];
+    'Brief Interviewer (SWF-02)', 'Remind Interviewer (SWF-02)', 'Escalate to HR (SWF-02)',
+    'Send Meeting Details (SWF-02)', 'Update Interviewer (SWF-02)'];
   const tail = addHandlerTail(w, 'WF-04', EMAILS);
   const dbFail = (node) => w.connect(node, tail.failed, 1);
 
@@ -67,7 +73,7 @@ export default function build() {
     dedupe: '"interview.invite:" + $("Create Invitation").first().json.interview_id',
     recipient: `${S}.app.candidate.email`,
     subject: `"Interview invitation: " + ${S}.app.position.title + " at " + ${S}.app.company.name`,
-    html: `(() => { ${H} const s = ${S}; const inv = $("Create Invitation").first().json; const url = $json.body.url; return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>Thank you for your application for <b>" + esc(s.app.position.title) + "</b> (reference " + esc(s.app.application_code) + "). We would like to invite you to an interview with " + esc(inv.interviewer_name) + ".</p><p><a href='" + esc(url) + "' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Choose your interview slot</a></p><p>Please pick a time before <b>" + esc(fmt(inv.invite_expires_at, s.timezone)) + "</b>. This link is personal; please do not forward it.</p><p>Kind regards,<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(inv.interview_code)); })()`,
+    html: `(() => { ${H} ${DAY} const s = ${S}; const inv = $("Create Invitation").first().json; const url = $json.body.url; return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>Thank you for your application for <b>" + esc(s.app.position.title) + "</b> (reference " + esc(s.app.application_code) + "). We would like to invite you to an interview with " + esc(inv.interviewer_name) + ".</p><p><a href='" + esc(url) + "' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Choose your interview slot</a></p><p>Please choose a time before <b>" + esc(day(inv.invite_expires_at, s.timezone)) + "</b>; the times on offer are all before that day. As soon as you book, we will email you the meeting details. This link is personal; please do not forward it.</p><p>Kind regards,<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(inv.interview_code)); })()`,
     applicationId: `${S}.app.application_id`, entityId: '$("Create Invitation").first().json.interview_id',
   }));
   w.connect(inviteLinkOk, 'Send Invitation (SWF-02)');
@@ -87,7 +93,7 @@ export default function build() {
     dedupe: `"interview.invite_reminder:" + ${S}.interview.interview_id`,
     recipient: `${S}.app.candidate.email`,
     subject: `"Reminder: please choose your interview slot for " + ${S}.app.position.title`,
-    html: `(() => { ${H} const s = ${S}; return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>We have not yet received your interview slot choice for <b>" + esc(s.app.position.title) + "</b>.</p><p><a href='" + esc($json.body.url) + "'>Choose your interview slot</a></p><p>The invitation expires on <b>" + esc(fmt(s.invite_expires_at, s.timezone)) + "</b>. If you are no longer interested, you can ignore this email.</p><p>Kind regards,<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(s.interview.interview_code)); })()`,
+    html: `(() => { ${H} ${DAY} const s = ${S}; return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>We have not yet received your interview slot choice for <b>" + esc(s.app.position.title) + "</b>.</p><p><a href='" + esc($json.body.url) + "'>Choose your interview slot</a></p><p>Please choose a time before <b>" + esc(day(s.invite_expires_at, s.timezone)) + "</b>, when the invitation expires. If you are no longer interested, you can ignore this email.</p><p>Kind regards,<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(s.interview.interview_code)); })()`,
     applicationId: `${S}.app.application_id`, entityId: `${S}.interview.interview_id`,
   }));
   w.connect(reminderLinkOk, 'Send Invitation Reminder (SWF-02)');
@@ -126,7 +132,7 @@ export default function build() {
     dedupe: `"interview.confirmed:" + ${S}.interview.interview_id`,
     recipient: `${S}.app.candidate.email`,
     subject: `"Interview confirmed: " + ${S}.app.position.title + ", " + DateTime.fromISO(${S}.interview.scheduled_start).setZone(${S}.timezone).toFormat("d LLL, h:mm a")`,
-    html: `(() => { ${H} ${GCAL} const s = ${S}; const iv = s.interview; const where = iv.mode === "ONLINE" ? (iv.meeting_url ? "Online: <a href='" + esc(iv.meeting_url) + "'>" + esc(iv.meeting_url) + "</a>" : "Online (the meeting link will follow)") : "On site at " + esc(s.app.company.name); return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>Your interview for <b>" + esc(s.app.position.title) + "</b> is confirmed.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b> (" + esc(s.timezone) + ")</td></tr><tr><td style='color:#667085'>Where</td><td>" + where + "</td></tr><tr><td style='color:#667085'>Interviewer</td><td>" + esc(iv.interviewer.full_name) + "</td></tr></table><p><a href='" + esc(gcal("Interview: " + s.app.position.title + " (" + s.app.company.name + ")", iv.scheduled_start, iv.scheduled_end, "Reference " + iv.interview_code)) + "'>Add to Google Calendar</a></p><p>If you need to cancel, please use the link in your invitation email so the slot can be offered to someone else.</p><p>Good luck!<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(iv.interview_code)); })()`,
+    html: `(() => { ${H} ${GCAL} ${MEET} const s = ${S}; const iv = s.interview; const where = meeting(iv, "Online. We will email you the meeting link, meeting ID and passcode before the interview."); return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>Your interview for <b>" + esc(s.app.position.title) + "</b> is confirmed.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b> (" + esc(s.timezone) + ")</td></tr><tr><td style='color:#667085'>Where</td><td>" + where + "</td></tr><tr><td style='color:#667085'>Interviewer</td><td>" + esc(iv.interviewer.full_name) + "</td></tr></table><p><a href='" + esc(gcal("Interview: " + s.app.position.title + " (" + s.app.company.name + ")", iv.scheduled_start, iv.scheduled_end, "Reference " + iv.interview_code + (iv.meeting_url ? " | Join: " + iv.meeting_url : ""))) + "'>Add to Google Calendar</a></p><p>If you need to cancel, please use the link in your invitation email so the slot can be offered to someone else.</p><p>Good luck!<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(iv.interview_code)); })()`,
     applicationId: `${S}.app.application_id`, entityId: `${S}.interview.interview_id`,
   }));
   w.connect(feedbackLinkOk, 'Confirm to Candidate (SWF-02)');
@@ -155,7 +161,7 @@ export default function build() {
     dedupe: `"interview.interviewer_brief:" + ${S}.interview.interview_id`,
     recipient: `${S}.interview.interviewer.email`,
     subject: `"Interview booked: " + ${S}.app.candidate.full_name + " (" + ${S}.app.position.title + ")"`,
-    html: `(() => { ${H} ${GCAL} const s = ${S}; const iv = s.interview; const url = $("Scorecard Link (SWF-01)").first().json.body.url; const ai = $("Draft Interview Questions (AI)").first().json; const items = String(ai.text || "").split("\\n").map(l => (l.match(/^\\s*\\d+[.)]\\s+(.+)$/) || [])[1]).map(q => q && q.replace(/\\*\\*|__/g, "").replace(/^[*"'“\\s]+|[*"'”\\s]+$/g, "")).filter(Boolean).slice(0, 5); const questions = items.length ? "<p style='margin-top:20px'><b>Suggested questions</b> <span style='color:#667085;font-size:12px'>(drafted by AI from the role and the screening notes; use your own judgement)</span></p><ol>" + items.map(q => "<li>" + esc(q) + "</li>").join("") + "</ol>" : ""; return layout("<p>Hi " + esc(iv.interviewer.full_name) + ",</p><p>An interview has been booked with you.</p><table cellpadding='4'><tr><td style='color:#667085'>Candidate</td><td><b>" + esc(s.app.candidate.full_name) + "</b> (" + esc(s.app.application_code) + ")</td></tr><tr><td style='color:#667085'>Position</td><td>" + esc(s.app.position.title) + "</td></tr><tr><td style='color:#667085'>When</td><td><b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b></td></tr><tr><td style='color:#667085'>Screening score</td><td>" + esc(s.app.application_score ?? "-") + "</td></tr></table><p><a href='" + esc(gcal("Interview: " + s.app.candidate.full_name, iv.scheduled_start, iv.scheduled_end, "Scorecard: " + url)) + "'>Add to Google Calendar</a></p><p>After the interview, please submit the scorecard (5 criteria, 1 to 5, plus your recommendation):<br/><a href='" + esc(url) + "' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px'>Open scorecard</a></p>" + questions, "Interview " + esc(iv.interview_code)); })()`,
+    html: `(() => { ${H} ${GCAL} ${MEET} const s = ${S}; const iv = s.interview; const url = $("Scorecard Link (SWF-01)").first().json.body.url; const ai = $("Draft Interview Questions (AI)").first().json; const items = String(ai.text || "").split("\\n").map(l => (l.match(/^\\s*\\d+[.)]\\s+(.+)$/) || [])[1]).map(q => q && q.replace(/\\*\\*|__/g, "").replace(/^[*"'“\\s]+|[*"'”\\s]+$/g, "")).filter(Boolean).slice(0, 5); const questions = items.length ? "<p style='margin-top:20px'><b>Suggested questions</b> <span style='color:#667085;font-size:12px'>(drafted by AI from the role and the screening notes; use your own judgement)</span></p><ol>" + items.map(q => "<li>" + esc(q) + "</li>").join("") + "</ol>" : ""; return layout("<p>Hi " + esc(iv.interviewer.full_name) + ",</p><p>An interview has been booked with you.</p><table cellpadding='4'><tr><td style='color:#667085'>Candidate</td><td><b>" + esc(s.app.candidate.full_name) + "</b> (" + esc(s.app.application_code) + ")</td></tr><tr><td style='color:#667085'>Position</td><td>" + esc(s.app.position.title) + "</td></tr><tr><td style='color:#667085'>When</td><td><b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b></td></tr><tr><td style='color:#667085'>Meeting</td><td>" + meeting(iv, "<b>Not set yet.</b> Add the link, meeting ID and passcode on the application page of the HR portal; the candidate is emailed as soon as you save them.") + "</td></tr><tr><td style='color:#667085'>Screening score</td><td>" + esc(s.app.application_score ?? "-") + "</td></tr></table><p><a href='" + esc(gcal("Interview: " + s.app.candidate.full_name, iv.scheduled_start, iv.scheduled_end, "Scorecard: " + url + (iv.meeting_url ? " | Join: " + iv.meeting_url : ""))) + "'>Add to Google Calendar</a></p><p>After the interview, please submit the scorecard (5 criteria, 1 to 5, plus your recommendation):<br/><a href='" + esc(url) + "' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px'>Open scorecard</a></p>" + questions, "Interview " + esc(iv.interview_code)); })()`,
     applicationId: `${S}.app.application_id`, entityId: `${S}.interview.interview_id`,
   }));
   w.chain('Confirm to Candidate (SWF-02)', 'Draft Interview Questions (AI)', 'Brief Interviewer (SWF-02)', tail.notified);
@@ -227,12 +233,34 @@ export default function build() {
   ]));
   w.chain('Apply Interview Decision', 'Result: Decision Applied', tail.finish);
 
+  // ---- 7: SEND_MEETING_DETAILS (staff changed the meeting of a booked interview) ----------------------------------
+  w.add(when('Still Booked?', `${S}.interview?.status === "CONFIRMED"`));
+  w.connect('Route by Action Type', 'Still Booked?', 7);
+  w.connect('Still Booked?', tail.skip, 1);
+  w.add(email('Send Meeting Details (SWF-02)', {
+    ctx: CTX, template: 'interview.meeting_details', entityType: 'INTERVIEW',
+    dedupe: `"interview.meeting_details:" + $("Build Context").first().json.action.id`,
+    recipient: `${S}.app.candidate.email`,
+    subject: `"Meeting details for your interview: " + ${S}.app.position.title + ", " + DateTime.fromISO(${S}.interview.scheduled_start).setZone(${S}.timezone).toFormat("d LLL, h:mm a")`,
+    html: `(() => { ${H} ${MEET} const s = ${S}; const iv = s.interview; return layout("<p>Dear " + esc(s.app.candidate.full_name) + ",</p><p>Here are the meeting details for your interview for <b>" + esc(s.app.position.title) + "</b>. They replace any details we sent before.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b> (" + esc(s.timezone) + ")</td></tr><tr><td style='color:#667085'>Where</td><td>" + meeting(iv, "-") + "</td></tr><tr><td style='color:#667085'>Interviewer</td><td>" + esc(iv.interviewer.full_name) + "</td></tr></table><p>Good luck!<br/>" + esc(s.app.company.name) + " Talent Team</p>", "Interview " + esc(iv.interview_code)); })()`,
+    applicationId: `${S}.app.application_id`, entityId: `${S}.interview.interview_id`,
+  }));
+  w.add(email('Update Interviewer (SWF-02)', {
+    ctx: CTX, template: 'interview.meeting_details_interviewer', entityType: 'INTERVIEW',
+    dedupe: `"interview.meeting_details_interviewer:" + $("Build Context").first().json.action.id`,
+    recipient: `${S}.interview.interviewer.email`,
+    subject: `"Meeting details updated: " + ${S}.app.candidate.full_name + " (" + ${S}.app.position.title + ")"`,
+    html: `(() => { ${H} ${MEET} const s = ${S}; const iv = s.interview; return layout("<p>Hi " + esc(iv.interviewer.full_name) + ",</p><p>The meeting details of your interview with <b>" + esc(s.app.candidate.full_name) + "</b> (" + esc(s.app.application_code) + ") on <b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b> were updated, and the candidate has been emailed:</p><p>" + meeting(iv, "-") + "</p>", "Interview " + esc(iv.interview_code)); })()`,
+    applicationId: `${S}.app.application_id`, entityId: `${S}.interview.interview_id`,
+  }));
+  w.chain('Still Booked?', 'Send Meeting Details (SWF-02)', 'Update Interviewer (SWF-02)', tail.notified);
+
   // ---- fallback --------------------------------------------------------------------------------------------
   w.add(set('Result: Unknown Action', [
     ['action_outcome', 'FAILED'],
     ['action_reason', x('"WF-04 has no handler for " + $("Build Context").first().json.action.action_type')],
   ]));
-  w.connect('Route by Action Type', 'Result: Unknown Action', 7);
+  w.connect('Route by Action Type', 'Result: Unknown Action', 8);
   w.connect('Result: Unknown Action', tail.finish);
 
   addNotes(w, 'WF-04');

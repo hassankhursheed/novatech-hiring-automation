@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-10-06T03:38:19.715Z",
+  "updatedAt": "2026-10-09T18:45:08.706Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf04Interview1",
   "name": "WF-04 Interview Management",
-  "description": "WF-04: interview invitations (signed slot links), reminders, expiry, calendar + confirmation, interviewer scorecard links, feedback reminders/escalation and post-interview evaluation (30/70 weighted, configurable).",
+  "description": "WF-04: interview invitations (signed slot links, slots before the response deadline), reminders, expiry, confirmation with the meeting details, interviewer brief and scorecard links, meeting-detail updates, feedback reminders/escalation and post-interview evaluation (30/70 weighted, configurable).",
   "active": true,
   "isArchived": false,
   "nodes": [
@@ -87,7 +87,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', $2, $3) AS run_id,\n       api.application_snapshot(coalesce(NULLIF($4, '')::uuid, iv.application_id)) AS app,\n       iv.snapshot AS interview,\n       (SELECT sa.run_at FROM ops.scheduled_actions sa\n         WHERE sa.entity_id = iv.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY' AND sa.status IN ('PENDING', 'RUNNING')\n         ORDER BY sa.run_at LIMIT 1) AS invite_expires_at,\n       api.test_directive($5) AS fault_inject,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone') AS timezone,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND 'HR_ADMIN' = ANY (s.roles)) AS hr_emails,\n       (SELECT jsonb_build_object('description', p.description, 'skills', a.skills, 'experience_years', a.experience_years,\n                                  'screening_summary', ai.summary, 'missing_skills', ai.missing_skills)\n          FROM hiring.applications a\n          JOIN hiring.job_positions p ON p.id = a.job_position_id\n          LEFT JOIN LATERAL (SELECT x.summary, x.missing_skills FROM hiring.ai_analyses x\n                              WHERE x.application_id = a.id AND x.status = 'COMPLETED'\n                              ORDER BY x.created_at DESC LIMIT 1) ai ON true\n         WHERE a.id = coalesce(NULLIF($4, '')::uuid, iv.application_id)) AS brief\n  FROM (SELECT 1) AS one\n  LEFT JOIN LATERAL (\n    SELECT i.id, i.application_id, api.interview_snapshot(i.id) AS snapshot\n      FROM hiring.interviews i\n     WHERE CASE WHEN $2 = 'INTERVIEW' THEN i.id = NULLIF($3, '')::uuid ELSE i.application_id = NULLIF($4, '')::uuid END\n     ORDER BY i.round DESC LIMIT 1) AS iv ON true",
+        "query": "SELECT api.start_workflow_execution($1::jsonb, 'SUB_WORKFLOW', $2, $3) AS run_id,\n       api.application_snapshot(coalesce(NULLIF($4, '')::uuid, iv.application_id)) AS app,\n       iv.snapshot AS interview,\n       coalesce((iv.snapshot->>'respond_by')::timestamptz,\n                (SELECT sa.run_at FROM ops.scheduled_actions sa\n                  WHERE sa.entity_id = iv.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY' AND sa.status IN ('PENDING', 'RUNNING')\n                  ORDER BY sa.run_at LIMIT 1)) AS invite_expires_at,\n       api.test_directive($5) AS fault_inject,\n       (SELECT value #>> '{}' FROM hiring.settings WHERE key = 'company.timezone') AS timezone,\n       (SELECT string_agg(s.email, ',' ORDER BY s.email) FROM hiring.staff_members s\n         WHERE s.is_active AND 'HR_ADMIN' = ANY (s.roles)) AS hr_emails,\n       (SELECT jsonb_build_object('description', p.description, 'skills', a.skills, 'experience_years', a.experience_years,\n                                  'screening_summary', ai.summary, 'missing_skills', ai.missing_skills)\n          FROM hiring.applications a\n          JOIN hiring.job_positions p ON p.id = a.job_position_id\n          LEFT JOIN LATERAL (SELECT x.summary, x.missing_skills FROM hiring.ai_analyses x\n                              WHERE x.application_id = a.id AND x.status = 'COMPLETED'\n                              ORDER BY x.created_at DESC LIMIT 1) ai ON true\n         WHERE a.id = coalesce(NULLIF($4, '')::uuid, iv.application_id)) AS brief\n  FROM (SELECT 1) AS one\n  LEFT JOIN LATERAL (\n    SELECT i.id, i.application_id, api.interview_snapshot(i.id) AS snapshot\n      FROM hiring.interviews i\n     WHERE CASE WHEN $2 = 'INTERVIEW' THEN i.id = NULLIF($3, '')::uuid ELSE i.application_id = NULLIF($4, '')::uuid END\n     ORDER BY i.round DESC LIMIT 1) AS iv ON true",
         "options": {
           "queryReplacement": "={{ [ JSON.stringify($json.ctx), $json.entity_type, $json.entity_id, $json.application_id, $json.ctx.correlation_id ] }}"
         }
@@ -279,6 +279,30 @@
                 ],
                 "combinator": "and"
               }
+            },
+            {
+              "outputKey": "SEND_MEETING_DETAILS",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8885c15f-b1ff-54ed-a4b0-81b5740a9c68",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "SEND_MEETING_DETAILS"
+                  }
+                ],
+                "combinator": "and"
+              }
             }
           ]
         },
@@ -358,13 +382,13 @@
             {
               "id": "b359a5a9-7e0b-5f71-ada4-e7880b097c99",
               "name": "action_outcome",
-              "value": "={{ [\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
+              "value": "={{ [\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\", \"Send Meeting Details (SWF-02)\", \"Update Interviewer (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
               "type": "string"
             },
             {
               "id": "c31a272b-181f-5170-aec1-1f9928611a06",
               "name": "action_reason",
-              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
+              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\", \"Send Meeting Details (SWF-02)\", \"Update Interviewer (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
               "type": "string"
             }
           ]
@@ -746,7 +770,7 @@
             "template_key": "interview.invitation",
             "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
             "subject": "={{ \"Interview invitation: \" + $(\"Start Log & Load State\").first().json.app.position.title + \" at \" + $(\"Start Log & Load State\").first().json.app.company.name }}",
-            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const inv = $(\"Create Invitation\").first().json; const url = $json.body.url; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Thank you for your application for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \"). We would like to invite you to an interview with \" + esc(inv.interviewer_name) + \".</p><p><a href='\" + esc(url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Choose your interview slot</a></p><p>Please pick a time before <b>\" + esc(fmt(inv.invite_expires_at, s.timezone)) + \"</b>. This link is personal; please do not forward it.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(inv.interview_code)); })() }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const day = (iso, tz) => DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy\"); const s = $(\"Start Log & Load State\").first().json; const inv = $(\"Create Invitation\").first().json; const url = $json.body.url; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Thank you for your application for <b>\" + esc(s.app.position.title) + \"</b> (reference \" + esc(s.app.application_code) + \"). We would like to invite you to an interview with \" + esc(inv.interviewer_name) + \".</p><p><a href='\" + esc(url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Choose your interview slot</a></p><p>Please choose a time before <b>\" + esc(day(inv.invite_expires_at, s.timezone)) + \"</b>; the times on offer are all before that day. As soon as you book, we will email you the meeting details. This link is personal; please do not forward it.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(inv.interview_code)); })() }}",
             "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
             "entity_type": "INTERVIEW",
             "entity_id": "={{ $(\"Create Invitation\").first().json.interview_id }}"
@@ -1050,7 +1074,7 @@
             "template_key": "interview.invitation_reminder",
             "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
             "subject": "={{ \"Reminder: please choose your interview slot for \" + $(\"Start Log & Load State\").first().json.app.position.title }}",
-            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>We have not yet received your interview slot choice for <b>\" + esc(s.app.position.title) + \"</b>.</p><p><a href='\" + esc($json.body.url) + \"'>Choose your interview slot</a></p><p>The invitation expires on <b>\" + esc(fmt(s.invite_expires_at, s.timezone)) + \"</b>. If you are no longer interested, you can ignore this email.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(s.interview.interview_code)); })() }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const day = (iso, tz) => DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy\"); const s = $(\"Start Log & Load State\").first().json; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>We have not yet received your interview slot choice for <b>\" + esc(s.app.position.title) + \"</b>.</p><p><a href='\" + esc($json.body.url) + \"'>Choose your interview slot</a></p><p>Please choose a time before <b>\" + esc(day(s.invite_expires_at, s.timezone)) + \"</b>, when the invitation expires. If you are no longer interested, you can ignore this email.</p><p>Kind regards,<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(s.interview.interview_code)); })() }}",
             "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
             "entity_type": "INTERVIEW",
             "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
@@ -1432,7 +1456,7 @@
             "template_key": "interview.confirmed",
             "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
             "subject": "={{ \"Interview confirmed: \" + $(\"Start Log & Load State\").first().json.app.position.title + \", \" + DateTime.fromISO($(\"Start Log & Load State\").first().json.interview.scheduled_start).setZone($(\"Start Log & Load State\").first().json.timezone).toFormat(\"d LLL, h:mm a\") }}",
-            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + DateTime.fromISO(start).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + DateTime.fromISO(end).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const where = iv.mode === \"ONLINE\" ? (iv.meeting_url ? \"Online: <a href='\" + esc(iv.meeting_url) + \"'>\" + esc(iv.meeting_url) + \"</a>\" : \"Online (the meeting link will follow)\") : \"On site at \" + esc(s.app.company.name); return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Your interview for <b>\" + esc(s.app.position.title) + \"</b> is confirmed.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b> (\" + esc(s.timezone) + \")</td></tr><tr><td style='color:#667085'>Where</td><td>\" + where + \"</td></tr><tr><td style='color:#667085'>Interviewer</td><td>\" + esc(iv.interviewer.full_name) + \"</td></tr></table><p><a href='\" + esc(gcal(\"Interview: \" + s.app.position.title + \" (\" + s.app.company.name + \")\", iv.scheduled_start, iv.scheduled_end, \"Reference \" + iv.interview_code)) + \"'>Add to Google Calendar</a></p><p>If you need to cancel, please use the link in your invitation email so the slot can be offered to someone else.</p><p>Good luck!<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + DateTime.fromISO(start).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + DateTime.fromISO(end).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const meeting = (iv, missing) => iv.mode === \"ONSITE\" ? \"On site: \" + esc(iv.meeting_notes || \"\") : (iv.meeting_url ? \"Online: <a href='\" + esc(iv.meeting_url) + \"'>\" + esc(iv.meeting_url) + \"</a>\" + (iv.meeting_id ? \"<br/>Meeting ID: <b>\" + esc(iv.meeting_id) + \"</b>\" : \"\") + (iv.meeting_passcode ? \"<br/>Passcode: <b>\" + esc(iv.meeting_passcode) + \"</b>\" : \"\") + (iv.meeting_notes ? \"<br/>\" + esc(iv.meeting_notes) : \"\") : missing); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const where = meeting(iv, \"Online. We will email you the meeting link, meeting ID and passcode before the interview.\"); return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Your interview for <b>\" + esc(s.app.position.title) + \"</b> is confirmed.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b> (\" + esc(s.timezone) + \")</td></tr><tr><td style='color:#667085'>Where</td><td>\" + where + \"</td></tr><tr><td style='color:#667085'>Interviewer</td><td>\" + esc(iv.interviewer.full_name) + \"</td></tr></table><p><a href='\" + esc(gcal(\"Interview: \" + s.app.position.title + \" (\" + s.app.company.name + \")\", iv.scheduled_start, iv.scheduled_end, \"Reference \" + iv.interview_code + (iv.meeting_url ? \" | Join: \" + iv.meeting_url : \"\"))) + \"'>Add to Google Calendar</a></p><p>If you need to cancel, please use the link in your invitation email so the slot can be offered to someone else.</p><p>Good luck!<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
             "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
             "entity_type": "INTERVIEW",
             "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
@@ -1613,7 +1637,7 @@
             "template_key": "interview.interviewer_brief",
             "recipient": "={{ $(\"Start Log & Load State\").first().json.interview.interviewer.email }}",
             "subject": "={{ \"Interview booked: \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \" (\" + $(\"Start Log & Load State\").first().json.app.position.title + \")\" }}",
-            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + DateTime.fromISO(start).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + DateTime.fromISO(end).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const url = $(\"Scorecard Link (SWF-01)\").first().json.body.url; const ai = $(\"Draft Interview Questions (AI)\").first().json; const items = String(ai.text || \"\").split(\"\\n\").map(l => (l.match(/^\\s*\\d+[.)]\\s+(.+)$/) || [])[1]).map(q => q && q.replace(/\\*\\*|__/g, \"\").replace(/^[*\"'“\\s]+|[*\"'”\\s]+$/g, \"\")).filter(Boolean).slice(0, 5); const questions = items.length ? \"<p style='margin-top:20px'><b>Suggested questions</b> <span style='color:#667085;font-size:12px'>(drafted by AI from the role and the screening notes; use your own judgement)</span></p><ol>\" + items.map(q => \"<li>\" + esc(q) + \"</li>\").join(\"\") + \"</ol>\" : \"\"; return layout(\"<p>Hi \" + esc(iv.interviewer.full_name) + \",</p><p>An interview has been booked with you.</p><table cellpadding='4'><tr><td style='color:#667085'>Candidate</td><td><b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.application_code) + \")</td></tr><tr><td style='color:#667085'>Position</td><td>\" + esc(s.app.position.title) + \"</td></tr><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b></td></tr><tr><td style='color:#667085'>Screening score</td><td>\" + esc(s.app.application_score ?? \"-\") + \"</td></tr></table><p><a href='\" + esc(gcal(\"Interview: \" + s.app.candidate.full_name, iv.scheduled_start, iv.scheduled_end, \"Scorecard: \" + url)) + \"'>Add to Google Calendar</a></p><p>After the interview, please submit the scorecard (5 criteria, 1 to 5, plus your recommendation):<br/><a href='\" + esc(url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px'>Open scorecard</a></p>\" + questions, \"Interview \" + esc(iv.interview_code)); })() }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const gcal = (title, start, end, details) => \"https://calendar.google.com/calendar/render?action=TEMPLATE&text=\" + encodeURIComponent(title) + \"&dates=\" + DateTime.fromISO(start).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"/\" + DateTime.fromISO(end).toUTC().toFormat(\"yyyyLLdd'T'HHmmss'Z'\") + \"&details=\" + encodeURIComponent(details); const meeting = (iv, missing) => iv.mode === \"ONSITE\" ? \"On site: \" + esc(iv.meeting_notes || \"\") : (iv.meeting_url ? \"Online: <a href='\" + esc(iv.meeting_url) + \"'>\" + esc(iv.meeting_url) + \"</a>\" + (iv.meeting_id ? \"<br/>Meeting ID: <b>\" + esc(iv.meeting_id) + \"</b>\" : \"\") + (iv.meeting_passcode ? \"<br/>Passcode: <b>\" + esc(iv.meeting_passcode) + \"</b>\" : \"\") + (iv.meeting_notes ? \"<br/>\" + esc(iv.meeting_notes) : \"\") : missing); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const url = $(\"Scorecard Link (SWF-01)\").first().json.body.url; const ai = $(\"Draft Interview Questions (AI)\").first().json; const items = String(ai.text || \"\").split(\"\\n\").map(l => (l.match(/^\\s*\\d+[.)]\\s+(.+)$/) || [])[1]).map(q => q && q.replace(/\\*\\*|__/g, \"\").replace(/^[*\"'“\\s]+|[*\"'”\\s]+$/g, \"\")).filter(Boolean).slice(0, 5); const questions = items.length ? \"<p style='margin-top:20px'><b>Suggested questions</b> <span style='color:#667085;font-size:12px'>(drafted by AI from the role and the screening notes; use your own judgement)</span></p><ol>\" + items.map(q => \"<li>\" + esc(q) + \"</li>\").join(\"\") + \"</ol>\" : \"\"; return layout(\"<p>Hi \" + esc(iv.interviewer.full_name) + \",</p><p>An interview has been booked with you.</p><table cellpadding='4'><tr><td style='color:#667085'>Candidate</td><td><b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.application_code) + \")</td></tr><tr><td style='color:#667085'>Position</td><td>\" + esc(s.app.position.title) + \"</td></tr><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b></td></tr><tr><td style='color:#667085'>Meeting</td><td>\" + meeting(iv, \"<b>Not set yet.</b> Add the link, meeting ID and passcode on the application page of the HR portal; the candidate is emailed as soon as you save them.\") + \"</td></tr><tr><td style='color:#667085'>Screening score</td><td>\" + esc(s.app.application_score ?? \"-\") + \"</td></tr></table><p><a href='\" + esc(gcal(\"Interview: \" + s.app.candidate.full_name, iv.scheduled_start, iv.scheduled_end, \"Scorecard: \" + url + (iv.meeting_url ? \" | Join: \" + iv.meeting_url : \"\"))) + \"'>Add to Google Calendar</a></p><p>After the interview, please submit the scorecard (5 criteria, 1 to 5, plus your recommendation):<br/><a href='\" + esc(url) + \"' style='background:#1570ef;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px'>Open scorecard</a></p>\" + questions, \"Interview \" + esc(iv.interview_code)); })() }}",
             "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
             "entity_type": "INTERVIEW",
             "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
@@ -2577,13 +2601,313 @@
       }
     },
     {
+      "id": "fccd560e-4b18-5102-a1a3-0ec875927004",
+      "name": "Still Booked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f5736852-e190-56fe-ab10-932e2ebbc9cb",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.interview?.status === \"CONFIRMED\") }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5472867-2529-5e3d-aa47-c8a4c9a97f77",
+      "name": "Send Meeting Details (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        1920
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.meeting_details:\" + $(\"Build Context\").first().json.action.id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.meeting_details",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.app.candidate.email }}",
+            "subject": "={{ \"Meeting details for your interview: \" + $(\"Start Log & Load State\").first().json.app.position.title + \", \" + DateTime.fromISO($(\"Start Log & Load State\").first().json.interview.scheduled_start).setZone($(\"Start Log & Load State\").first().json.timezone).toFormat(\"d LLL, h:mm a\") }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const meeting = (iv, missing) => iv.mode === \"ONSITE\" ? \"On site: \" + esc(iv.meeting_notes || \"\") : (iv.meeting_url ? \"Online: <a href='\" + esc(iv.meeting_url) + \"'>\" + esc(iv.meeting_url) + \"</a>\" + (iv.meeting_id ? \"<br/>Meeting ID: <b>\" + esc(iv.meeting_id) + \"</b>\" : \"\") + (iv.meeting_passcode ? \"<br/>Passcode: <b>\" + esc(iv.meeting_passcode) + \"</b>\" : \"\") + (iv.meeting_notes ? \"<br/>\" + esc(iv.meeting_notes) : \"\") : missing); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; return layout(\"<p>Dear \" + esc(s.app.candidate.full_name) + \",</p><p>Here are the meeting details for your interview for <b>\" + esc(s.app.position.title) + \"</b>. They replace any details we sent before.</p><table cellpadding='4'><tr><td style='color:#667085'>When</td><td><b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b> (\" + esc(s.timezone) + \")</td></tr><tr><td style='color:#667085'>Where</td><td>\" + meeting(iv, \"-\") + \"</td></tr><tr><td style='color:#667085'>Interviewer</td><td>\" + esc(iv.interviewer.full_name) + \"</td></tr></table><p>Good luck!<br/>\" + esc(s.app.company.name) + \" Talent Team</p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "7321f4b8-6995-5c23-a6a8-6cf966b17da7",
+      "name": "Update Interviewer (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1800,
+        1320
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.meeting_details_interviewer:\" + $(\"Build Context\").first().json.action.id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.meeting_details_interviewer",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.interview.interviewer.email }}",
+            "subject": "={{ \"Meeting details updated: \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \" (\" + $(\"Start Log & Load State\").first().json.app.position.title + \")\" }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const meeting = (iv, missing) => iv.mode === \"ONSITE\" ? \"On site: \" + esc(iv.meeting_notes || \"\") : (iv.meeting_url ? \"Online: <a href='\" + esc(iv.meeting_url) + \"'>\" + esc(iv.meeting_url) + \"</a>\" + (iv.meeting_id ? \"<br/>Meeting ID: <b>\" + esc(iv.meeting_id) + \"</b>\" : \"\") + (iv.meeting_passcode ? \"<br/>Passcode: <b>\" + esc(iv.meeting_passcode) + \"</b>\" : \"\") + (iv.meeting_notes ? \"<br/>\" + esc(iv.meeting_notes) : \"\") : missing); const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; return layout(\"<p>Hi \" + esc(iv.interviewer.full_name) + \",</p><p>The meeting details of your interview with <b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.application_code) + \") on <b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b> were updated, and the candidate has been emailed:</p><p>\" + meeting(iv, \"-\") + \"</p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
       "id": "e58df9d1-768d-56fe-a2f8-b2bbf4af0666",
       "name": "Result: Unknown Action",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
         1280,
-        1720
+        1920
       ],
       "parameters": {
         "mode": "manual",
@@ -2616,9 +2940,9 @@
         200
       ],
       "parameters": {
-        "content": "## WF-04 Interview Management\nCalled by **WF-00** for interview actions. Every branch re-checks the current state first; a stale timer is **SKIPPED**.\n\n### Invitation\n- `api.create_interview_invitation` (idempotent per round; schedules reminder and expiry) → signed slot link → email to the candidate.\n\n### Booking\n- The candidate picks a slot in the portal (`api.confirm_interview_slot`).\n- This workflow records the calendar event, confirms to the candidate and briefs the interviewer with a scorecard link.\n- **AI interview questions**: n8n's own Mistral credential drafts 5 role-specific questions for the brief (no personal data; the brief is sent without them if the model is unavailable).\n\n### Feedback\n- Reminder, then escalation to HR. Submitting the scorecard (link or HR portal) cancels both timers.\n\n### Evaluation\n1. **AI interview assessment** (backend, Mistral): reads ratings, comments and screening results; recorded with `api.record_interview_assessment`.\n2. **Weighted score** (30 % screening + 70 % interview; weights and thresholds are settings).\n3. The AI can only add a hiring-manager review (disagreement, or comments that contradict the ratings) → `api.apply_interview_decision`.\n\nRetryable failures return FAILED (dispatcher backoff); permanent ones go to the error queue (SWF-03). Emails are sent at most once per dedupe key.",
+        "content": "## WF-04 Interview Management\nCalled by **WF-00** for interview actions. Every branch re-checks the current state first; a stale timer is **SKIPPED**.\n\n### Invitation\n- `api.create_interview_invitation` (idempotent per round) → signed slot link → email to the candidate.\n- **Response deadline**: midnight after `interview.invite_expires_after`, moved out until the candidate can choose from `interview.min_choice_days` days. Only slots on days **before** the deadline are offered; the expiry timer runs at the deadline, the reminder a day before.\n- Slots come from each interviewer's weekly availability (`hiring.interviewer_availability`).\n\n### Booking\n- The candidate picks a slot in the portal (`api.confirm_interview_slot`).\n- This workflow records the calendar event, confirms to the candidate **with the meeting details** (link, meeting ID, passcode, or on-site instructions, entered by staff when they shortlist) and briefs the interviewer with a scorecard link.\n- **Meeting changes** (`SEND_MEETING_DETAILS`): when staff change the meeting of a booked interview, the candidate and the interviewer get the new details.\n- **AI interview questions**: n8n's own Mistral credential drafts 5 role-specific questions for the brief (no personal data; the brief is sent without them if the model is unavailable).\n\n### Feedback\n- Reminder, then escalation to HR. Submitting the scorecard (link or HR portal) cancels both timers.\n\n### Evaluation\n1. **AI interview assessment** (backend, Mistral): reads ratings, comments and screening results; recorded with `api.record_interview_assessment`.\n2. **Weighted score** (30 % screening + 70 % interview; weights and thresholds are settings).\n3. The AI can only add a hiring-manager review (disagreement, or comments that contradict the ratings) → `api.apply_interview_decision`.\n\nRetryable failures return FAILED (dispatcher backoff); permanent ones go to the error queue (SWF-03). Emails are sent at most once per dedupe key.",
         "width": 680,
-        "height": 760,
+        "height": 960,
         "color": 5
       }
     },
@@ -2629,7 +2953,7 @@
       "typeVersion": 1,
       "position": [
         -540,
-        1000
+        1200
       ],
       "parameters": {
         "content": "## Setup: Mistral credential\nThe node **Mistral Chat Model** uses the n8n credential **Mistral AI (n8n)**, with n8n's own key (not the backend key).\n1. Put the key in `.env` as `N8N_MISTRAL_API_KEY`.\n2. Run `sh scripts/n8n-mistral-key.sh` (Windows: `scripts\\n8n-mistral-key.ps1`). Or: **Credentials** → **Mistral AI (n8n)** → paste the key → **Save**.\n\nModel: `ministral-8b-latest`. Mistral limits apply per workspace and per model; the backend uses `ministral-14b`, so this model has its own budget (188 requests/min on a free key). Without a key the interviewer brief is still sent, just without the suggested questions.",
@@ -2782,6 +3106,13 @@
         [
           {
             "node": "Interviewed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Still Booked?",
             "type": "main",
             "index": 0
           }
@@ -3277,6 +3608,46 @@
         ]
       ]
     },
+    "Still Booked?": {
+      "main": [
+        [
+          {
+            "node": "Send Meeting Details (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Meeting Details (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Update Interviewer (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Interviewer (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Result: Unknown Action": {
       "main": [
         [
@@ -3299,9 +3670,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "26733e92-7f24-4f15-8367-00d432286409",
-  "activeVersionId": "26733e92-7f24-4f15-8367-00d432286409",
-  "versionCounter": 7,
+  "versionId": "e9b1643c-1b5c-45be-868d-a90650e5f59b",
+  "activeVersionId": "e9b1643c-1b5c-45be-868d-a90650e5f59b",
+  "versionCounter": 8,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

@@ -72,7 +72,9 @@ UPDATE hiring.settings SET value = '300000', updated_by = 'sana.malik' WHERE key
 | `ops.alert_email` | ops-alerts@novatech.example | recipient of the error digest (WF-07) and fallback for reports |
 | `screening.auto_reject_enabled` | true | if false, low scores go to review instead of automatic rejection |
 | `screening.ai_enabled` | true | if false, screening runs on rules only |
-| `interview.invite_reminder_after` / `invite_expires_after` | 2 days / 4 days | unconfirmed invitation handling |
+| `interview.invite_reminder_after` / `invite_expires_after` | 2 days / 4 days | unconfirmed invitations: the response deadline is midnight after `invite_expires_after`; the reminder goes out after `invite_reminder_after`, at the latest a day before the deadline |
+| `interview.min_choice_days` | 2 | the deadline moves out until the candidate can choose from at least this many days (slots are only offered on days before the deadline) |
+| `interview.availability_days` | 15 | slots are generated this many days ahead from each interviewer's weekly hours (`hiring.interviewer_availability`), whenever an invitation is sent |
 | `interview.feedback_reminder_after` / `feedback_escalate_after` | 1 day / 2 days | missing interviewer feedback |
 | `interview.slot_min_notice` | 2 hours | earliest slot offered or bookable, relative to now |
 | `evaluation.application_weight` / `interview_weight` | 0.30 / 0.70 | final score formula |

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import { Link } from 'react-router-dom'
 import { humanize } from '../lib/format'
 
 export const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(' ')
@@ -35,6 +36,15 @@ export function Button({ variant = 'primary', busy, className, children, ...prop
       {busy && <Spinner className="h-4 w-4" />}
       {children}
     </button>
+  )
+}
+
+/** A small button-styled link that opens a record (table rows). */
+export function OpenButton({ to, label = 'Open' }: { to: string; label?: string }) {
+  return (
+    <Link to={to} className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-slate-300 hover:bg-brand-50">
+      {label} →
+    </Link>
   )
 }
 

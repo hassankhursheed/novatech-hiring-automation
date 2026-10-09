@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageTitle } from '../../components/layout'
-import { Alert, Card, Empty, Input, Loading, Select, StatusBadge } from '../../components/ui'
+import { Alert, Card, Empty, Input, Loading, OpenButton, Select, StatusBadge } from '../../components/ui'
 import { explain } from '../../lib/api'
 import { formatScore, formatShort, humanize } from '../../lib/format'
 import { useStaffQuery, type ApplicationRow } from '../../lib/staff'
@@ -50,6 +50,7 @@ export default function Applications() {
                   <th className="py-2 pr-4 font-medium">Position</th><th className="py-2 pr-4 font-medium">Status</th>
                   <th className="py-2 pr-4 font-medium">Screening</th><th className="py-2 pr-4 font-medium">Final</th>
                   <th className="py-2 pr-4 font-medium">AI (advisory)</th><th className="py-2 pr-4 font-medium">Updated</th>
+                  <th className="py-2 font-medium"><span className="sr-only">Open</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -63,6 +64,7 @@ export default function Applications() {
                     <td className="py-2 pr-4 text-slate-700">{formatScore(r.final_score)}</td>
                     <td className="py-2 pr-4 text-slate-700">{humanize(r.ai_recommendation)}</td>
                     <td className="py-2 pr-4 text-slate-500">{formatShort(r.status_changed_at)}</td>
+                    <td className="py-2 text-right"><OpenButton to={`/staff/applications/${r.application_id}`} /></td>
                   </tr>
                 ))}
               </tbody>

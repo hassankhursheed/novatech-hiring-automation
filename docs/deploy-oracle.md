@@ -120,4 +120,5 @@ ssh -i "$env:USERPROFILE\.ssh\oracle-novatech.key" -L 5678:localhost:5678 -L 300
 | Clean test data | `sh scripts/purge-applications.sh` (test domains only) or `--all` |
 
 Limits on the free setup: Mistral free key about 30 AI requests per minute; Gmail about 500 (Workspace: 2,000)
-recipients per day. Interview slots are topped up daily for the next 15 days.
+recipients per day. Interview slots are generated from each interviewer's weekly hours whenever an invitation is
+sent (and topped up daily for the next 15 days).

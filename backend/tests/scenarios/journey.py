@@ -18,6 +18,14 @@ from tests.scenarios.harness import CheckFailed, Harness
 
 STAFF_EMAILS = {"usman": "usman.tariq@novatech.example"}
 
+# The meeting HR enters when shortlisting (a journey run is a test: replace with a real room for live demos).
+JOURNEY_MEETING = {
+    "mode": "ONLINE",
+    "meeting_url": "https://zoom.us/j/0000000000",
+    "meeting_id": "000 000 0000",
+    "meeting_passcode": "journey",
+}
+
 CV = """Ali Raza - Backend Developer
 Python developer with 4 years of experience building REST APIs with FastAPI and Django.
 Designed PostgreSQL schemas, wrote SQL migrations and tuned queries; Docker and Git daily.
@@ -113,22 +121,31 @@ class Journey:
             under_review = self.inbox(email, "is being reviewed")
             self.step("2 Screening email", bool(under_review), "candidate told the application is being reviewed")
             self.staff(
-                f"applications/{app_id}/transition", {"to_status": "SHORTLISTED", "reason": "Strong backend profile"}
+                f"applications/{app_id}/transition",
+                {"to_status": "SHORTLISTED", "reason": "Strong backend profile", "meeting": JOURNEY_MEETING},
             )
             status = self.wait_status(app_id, {"SHORTLISTED"})
 
         # 3. Interview: invitation, slot choice, confirmation -------------------------------------------------
         h.settle()
+        self.staff(f"applications/{app_id}/meeting", JOURNEY_MEETING)  # an automatic shortlist has none yet
         token = h.link_token(email, "Interview invitation")
         view = h.portal("GET", "interview", token).json()
         slot = view["slots"][0]
+        hidden = view.get("meeting_url") is None  # meeting details are not shown before the booking
         confirmed = h.portal("POST", "interview/confirm", token, {"slot_id": slot["slot_id"]})
         status = self.wait_status(app_id, {"INTERVIEW_SCHEDULED"})
         confirmation = self.inbox(email, "Interview confirmed")
+        booked = h.portal("GET", "interview", token).json()
         self.step(
             "3 Interview booked",
-            confirmed.status_code == 200 and status == "INTERVIEW_SCHEDULED" and bool(confirmation),
-            f"invitation email -> slot {slot['starts_at']} booked -> confirmation email",
+            confirmed.status_code == 200
+            and status == "INTERVIEW_SCHEDULED"
+            and bool(confirmation)
+            and hidden
+            and booked.get("meeting_url") == JOURNEY_MEETING["meeting_url"],
+            f"invitation email -> slot {slot['starts_at']} booked (before {view['respond_by']}) -> confirmation email "
+            "with the meeting details",
         )
 
         # 4. Scorecard (entered by HR in the portal) -> AI assessment + weighted evaluation --------------------

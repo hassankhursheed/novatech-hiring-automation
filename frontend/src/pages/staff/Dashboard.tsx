@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageTitle } from '../../components/layout'
-import { Alert, Card, Empty, Loading, StatusBadge, cx } from '../../components/ui'
+import { Alert, Card, Empty, Loading, OpenButton, StatusBadge, cx } from '../../components/ui'
 import { explain } from '../../lib/api'
 import { formatDate, formatMoney, formatShort } from '../../lib/format'
 import { useStaffSession } from '../../lib/session'
@@ -78,7 +78,7 @@ export default function Dashboard() {
           {rows.isLoading ? <Loading /> : rows.error ? <Alert tone="error">{explain(rows.error)}</Alert> : !rows.data?.length ? <Empty>Nothing waiting here.</Empty> : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                <thead><tr className="border-b border-slate-200 text-xs uppercase text-slate-500">{active.columns.map(([, label]) => <th key={label} className="py-2 pr-4 font-medium">{label}</th>)}</tr></thead>
+                <thead><tr className="border-b border-slate-200 text-xs uppercase text-slate-500">{active.columns.map(([, label]) => <th key={label} className="py-2 pr-4 font-medium">{label}</th>)}<th className="py-2"><span className="sr-only">Open</span></th></tr></thead>
                 <tbody>
                   {rows.data.map((row, i) => (
                     <tr key={i} className="border-b border-slate-100 last:border-0">
@@ -89,6 +89,7 @@ export default function Dashboard() {
                             : cell(key, row[key])}
                         </td>
                       ))}
+                      <td className="py-2 text-right">{row.application_id ? <OpenButton to={`/staff/applications/${row.application_id}`} /> : null}</td>
                     </tr>
                   ))}
                 </tbody>

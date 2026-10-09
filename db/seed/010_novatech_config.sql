@@ -126,20 +126,19 @@ ON CONFLICT (task_key) DO UPDATE
       due_offset_days = EXCLUDED.due_offset_days, sort_order = EXCLUDED.sort_order;
 
 -- ---------------------------------------------------------------------------------------------
--- Interview availability: next 15 days, weekdays, 45-minute slots (company timezone).
--- Overlaps are impossible (exclusion constraint); re-running only adds missing slots.
+-- Interview availability: weekly hours per interviewer (Monday-Friday, 45-minute interviews, company timezone).
+-- Slots for the next interview.availability_days days are generated from it here and whenever an invitation
+-- is sent. Overlaps are impossible (exclusion constraint); re-running only adds missing slots.
 -- ---------------------------------------------------------------------------------------------
-INSERT INTO hiring.interview_slots (interviewer_id, starts_at, ends_at)
-SELECT i.interviewer_id,
-       (d::date + t.slot_time) AT TIME ZONE hiring.company_timezone(),
-       (d::date + t.slot_time + interval '45 minutes') AT TIME ZONE hiring.company_timezone()
-  FROM generate_series((now() AT TIME ZONE hiring.company_timezone())::date + 1,
-                       (now() AT TIME ZONE hiring.company_timezone())::date + 15, interval '1 day') AS d
+INSERT INTO hiring.interviewer_availability (interviewer_id, isodow, start_time, duration_minutes)
+SELECT i.interviewer_id, d.isodow, t.slot_time, 45
+  FROM (VALUES ('00000000-0000-4000-8000-000000000003'::uuid), ('00000000-0000-4000-8000-000000000004'::uuid),
+               ('00000000-0000-4000-8000-000000000005'::uuid), ('00000000-0000-4000-8000-000000000006'::uuid))
+       AS i(interviewer_id)
+ CROSS JOIN generate_series(1, 5) AS d(isodow)
  CROSS JOIN (VALUES (time '11:00'), (time '12:00'), (time '14:30'), (time '15:30'), (time '16:30')) AS t(slot_time)
- CROSS JOIN (VALUES ('00000000-0000-4000-8000-000000000003'::uuid), ('00000000-0000-4000-8000-000000000004'::uuid),
-                    ('00000000-0000-4000-8000-000000000005'::uuid), ('00000000-0000-4000-8000-000000000006'::uuid))
-            AS i(interviewer_id)
- WHERE extract(isodow FROM d) < 6
 ON CONFLICT DO NOTHING;
+
+DO $$ BEGIN PERFORM hiring.ensure_interview_slots(NULL); END $$;
 
 COMMIT;
