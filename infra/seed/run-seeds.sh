@@ -33,7 +33,7 @@ CREATE TEMP TABLE staff_in (id uuid, full_name text, email text, department text
 \copy staff_in FROM '/config/staff.csv' WITH (FORMAT csv, HEADER true)
 INSERT INTO hiring.staff_members AS s (id, full_name, email, department, job_title, roles, is_active)
 SELECT id, btrim(full_name), lower(btrim(email)), nullif(btrim(department), ''), nullif(btrim(job_title), ''),
-       string_to_array(upper(regexp_replace(roles, '\s', '', 'g')), '|'),
+       array_remove(string_to_array(upper(regexp_replace(coalesce(roles, ''), '\s', '', 'g')), '|'), ''),
        coalesce(lower(btrim(active)), 'true') <> 'false'
   FROM staff_in
 ON CONFLICT (id) DO UPDATE

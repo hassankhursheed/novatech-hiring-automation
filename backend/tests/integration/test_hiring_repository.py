@@ -138,8 +138,15 @@ async def test_candidate_interview_offer_and_acceptance_through_the_repository(
     with pytest.raises(NotFoundError):
         await repo.interview_for_candidate(interview_id, str(uuid.uuid4()))
 
+    meeting = {"mode": "ONLINE", "meeting_url": "https://zoom.us/j/9988776655", "meeting_passcode": "nt2026"}
+    assert (await repo.set_meeting(app_id, meeting, staff(SANA_HR)))["candidate_notified"] is False
+    hidden = await repo.interview_for_candidate(interview_id, candidate_id)
+    assert hidden["meeting_url"] is None and hidden["meeting_passcode"] is None  # not before the booking
+
     confirmed = await repo.confirm_slot(interview_id, str(view["slots"][0]["slot_id"]), candidate)
     assert confirmed["changed"] is True
+    shown = await repo.interview_for_candidate(interview_id, candidate_id)
+    assert shown["meeting_url"] == meeting["meeting_url"] and shown["meeting_passcode"] == "nt2026"
     assert (await repo.interview_for_staff(interview_id))["feedback_submitted"] is False
 
     feedback = {
@@ -229,8 +236,12 @@ async def test_portal_read_models_and_single_use_links(db: TransactionDatabase, 
     app_id, _ = await shortlisted(db)
     await call(db, "SELECT * FROM api.create_interview_invitation(%s, %s)", app_id, SYSTEM)
 
-    detail = await directory.application_detail(app_id)
+    detail = await directory.application_detail(app_id, SANA_HR)
     assert detail["status"] == "SHORTLISTED" and detail["history"] and detail["scores"]
+    assert detail["permissions"] == {"can_manage": True, "can_manage_interviews": True, "is_hr_admin": True}
+    assert detail["meeting_plan"] is None
+    interviewer_view = await directory.application_detail(app_id, USMAN_INTERVIEWER)
+    assert interviewer_view["permissions"]["can_manage"] is False
     assert detail["interviews"] and detail["timeline"] and isinstance(detail["staff_transitions"], list)
     assert detail["interview_assessments"] == []  # read by backend_app; empty until a scorecard is assessed
     assert any(t["to_status"] == "REJECTED" for t in detail["staff_transitions"])

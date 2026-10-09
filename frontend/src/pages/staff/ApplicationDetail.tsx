@@ -1,11 +1,17 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageTitle } from '../../components/layout'
+import { MeetingFields, MeetingSummary } from '../../components/meeting'
 import { ScorecardForm, type ScorecardValues } from '../../components/scorecard'
 import { Alert, Button, Card, Empty, Field, Input, KeyValue, Loading, Pill, StatusBadge, Textarea, cx } from '../../components/ui'
 import { explain } from '../../lib/api'
+import { TIMEZONE } from '../../lib/config'
 import { formatDate, formatDateTime, formatMoney, formatScore, formatShort, humanize } from '../../lib/format'
+import { hasMeeting, meetingComplete, meetingPayload, meetingValues, type Meeting } from '../../lib/meeting'
+import { useStaffSession } from '../../lib/session'
 import { useStaffAction, useStaffQuery } from '../../lib/staff'
+
+const deadlineFormat = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, weekday: 'short', day: 'numeric', month: 'short' })
 
 interface RuleResult { rule_key: string; label: string; points_possible: number; points_awarded: number; matched: string[]; evidence: string }
 interface Detail {
@@ -27,13 +33,15 @@ interface Detail {
   history: { from_status: string | null; to_status: string; reason: string | null; actor_type: string; actor_id: string; changed_at: string }[]
   scores: { scoring_version: number; score: number; route: string; breakdown: RuleResult[]; created_at: string }[]
   ai_analyses: { status: string; provider: string | null; model: string | null; technical_strength: number | null; experience_relevance: number | null; communication_indication: number | null; missing_skills: string[] | null; summary: string | null; recommendation: string | null; fallback_reason: string | null; attempts: number; created_at: string }[]
-  interviews: { interview_id: string; interview_code: string; round: number; status: string; scheduled_start: string | null; interviewer: { full_name: string } }[]
+  interviews: (Meeting & { interview_id: string; interview_code: string; round: number; status: string; scheduled_start: string | null; respond_by: string | null; interviewer: { id: string; full_name: string } })[]
   feedback: { interview_code: string; technical_skills: number; communication: number; problem_solving: number; experience: number; team_fit: number; interview_score: number; recommendation: string; comments: string }[]
   interview_assessments: { interview_code: string; status: string; provider: string | null; model: string | null; recommendation: string | null; evidence_alignment: string | null; strengths: string[]; concerns: string[]; summary: string | null; fallback_reason: string | null; attempts: number; created_at: string }[]
-  offers: { offer_id: string; offer_code: string; revision: number; status: string; monthly_salary: number; currency: string; joining_date: string; required_approval_levels: number; approvals: { level: number; decision: string }[]; next_level: number | null; candidate_message: string | null; expires_at: string | null }[]
+  offers: { offer_id: string; offer_code: string; revision: number; status: string; monthly_salary: number; currency: string; joining_date: string; required_approval_levels: number; approvals: { level: number; decision: string }[]; next_level: number | null; next_approvers: { id: string; full_name: string; job_title: string | null }[]; candidate_message: string | null; expires_at: string | null }[]
   employee: { employee_id: string; employee_code: string; company_email: string; joining_date: string; tasks: { task_id: string; title: string; owner_role: string; due_date: string; status: string }[] } | null
   notifications: { template_key: string; recipient: string; status: string; created_at: string }[]
   staff_transitions: { to_status: string; description: string }[]
+  meeting_plan: (Meeting & { updated_at: string }) | null
+  permissions: { can_manage: boolean; can_manage_interviews: boolean; is_hr_admin: boolean }
   timeline: { occurred_at: string; source: string; workflow_name: string | null; action: string; outcome: string; from_status: string | null; to_status: string | null; actor: string | null; error_code: string | null; error_message: string | null }[]
 }
 
@@ -145,24 +153,44 @@ function Screening({ a }: { a: Detail }) {
 }
 
 function Interviews({ a }: { a: Detail }) {
+  const session = useStaffSession()
+  const me = session?.staff.staff_id
   const cancel = useStaffAction<{ id: string; reason: string }>((v) => `/interviews/${v.id}/cancel`, (v) => ({ reason: v.reason }))
   const noShow = useStaffAction<{ id: string }>((v) => `/interviews/${v.id}/no-show`)
   const scorecard = useStaffAction<{ id: string; values: ScorecardValues }>((v) => `/interviews/${v.id}/feedback`, (v) => v.values)
   const [recording, setRecording] = useState<string | null>(null)
   if (!a.interviews.length) return null
+  const canManage = a.permissions.can_manage_interviews
   return (
     <Card title="Interviews">
       <div className="space-y-4">
         {a.interviews.map((iv) => {
           const fb = a.feedback.find((f) => f.interview_code === iv.interview_code)
           const ai = a.interview_assessments.find((x) => x.interview_code === iv.interview_code)
+          const open = ['INVITED', 'CONFIRMED'].includes(iv.status)
+          const canScore = a.permissions.is_hr_admin || iv.interviewer.id === me
           return (
             <div key={iv.interview_id} className="rounded-lg border border-slate-200 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-medium text-slate-900">{iv.interview_code} · round {iv.round} · {iv.interviewer.full_name}</p>
                 <Pill tone={iv.status === 'COMPLETED' ? 'green' : ['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(iv.status) ? 'red' : 'blue'}>{humanize(iv.status)}</Pill>
               </div>
-              <p className="mt-1 text-xs text-slate-500">{formatDateTime(iv.scheduled_start)}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {iv.status === 'INVITED'
+                  ? `Waiting for the candidate to choose a time${iv.respond_by ? ` (before ${deadlineFormat.format(new Date(iv.respond_by))})` : ''}`
+                  : formatDateTime(iv.scheduled_start)}
+              </p>
+              {open && (
+                <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Meeting · sent to the candidate after booking</p>
+                  <div className="mt-1 text-slate-800">
+                    <MeetingSummary meeting={iv} missing={iv.status === 'CONFIRMED'
+                      ? 'Not set yet: the candidate was told the details will follow. Add them below and they are emailed at once.'
+                      : 'Not set yet. Add them before the candidate books, or they are emailed when you save them.'} />
+                  </div>
+                  {canManage && <MeetingEditor applicationId={a.application_id} meeting={iv} booked={iv.status === 'CONFIRMED'} />}
+                </div>
+              )}
               {fb && (
                 <div className="mt-3 text-sm">
                   <p className="text-slate-700">Scorecard {formatScore(fb.interview_score)} · {humanize(fb.recommendation)} · tech {fb.technical_skills}, comm {fb.communication}, problem {fb.problem_solving}, exp {fb.experience}, fit {fb.team_fit}</p>
@@ -177,14 +205,14 @@ function Interviews({ a }: { a: Detail }) {
                     onSubmit={(values) => scorecard.mutate({ id: iv.interview_id, values }, { onSuccess: () => setRecording(null) })} />
                 </div>
               )}
-              {iv.status === 'CONFIRMED' && recording !== iv.interview_id && (
+              {iv.status === 'CONFIRMED' && recording !== iv.interview_id && (canScore || canManage) && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button onClick={() => setRecording(iv.interview_id)}>Record scorecard</Button>
-                  <Button variant="secondary" busy={noShow.isPending} onClick={() => noShow.mutate({ id: iv.interview_id })}>Mark no-show</Button>
-                  <Button variant="ghost" busy={cancel.isPending} onClick={() => {
+                  {canScore && <Button onClick={() => setRecording(iv.interview_id)}>Record scorecard</Button>}
+                  {canManage && <Button variant="secondary" busy={noShow.isPending} onClick={() => noShow.mutate({ id: iv.interview_id })}>Mark no-show</Button>}
+                  {canManage && <Button variant="ghost" busy={cancel.isPending} onClick={() => {
                     const reason = window.prompt('Reason for cancelling this interview?')
                     if (reason && reason.trim().length >= 3) cancel.mutate({ id: iv.interview_id, reason })
-                  }}>Cancel interview</Button>
+                  }}>Cancel interview</Button>}
                 </div>
               )}
             </div>
@@ -194,6 +222,33 @@ function Interviews({ a }: { a: Detail }) {
         {scorecard.isSuccess && <Alert tone="success">Scorecard saved. The evaluation runs in the background; refresh in a moment to see the decision.</Alert>}
       </div>
     </Card>
+  )
+}
+
+function MeetingEditor({ applicationId, meeting, booked }: { applicationId: string; meeting: Meeting; booked: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(() => meetingValues(meeting))
+  const save = useStaffAction<void>(() => `/applications/${applicationId}/meeting`, () => meetingPayload(value))
+  if (!editing) {
+    return (
+      <div className="mt-2">
+        {save.isSuccess && <p className="mb-2 text-xs text-emerald-700">Saved{booked ? '; the candidate and the interviewer are being emailed the new details.' : '.'}</p>}
+        <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => { setValue(meetingValues(meeting)); setEditing(true) }}>
+          {hasMeeting(meeting) ? 'Change meeting details' : 'Add meeting details'}
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-3 space-y-3">
+      <MeetingFields value={value} onChange={setValue} />
+      {booked && <p className="text-xs text-amber-700">The candidate has booked: saving emails them the new details.</p>}
+      {save.error && <Alert tone="error">{explain(save.error)}</Alert>}
+      <div className="flex gap-2">
+        <Button disabled={!meetingComplete(value)} busy={save.isPending} onClick={() => save.mutate(undefined, { onSuccess: () => setEditing(false) })}>Save</Button>
+        <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+      </div>
+    </div>
   )
 }
 
@@ -221,6 +276,7 @@ function InterviewAssessment({ ai }: { ai: Detail['interview_assessments'][numbe
 }
 
 function Offers({ a }: { a: Detail }) {
+  const me = useStaffSession()?.staff.staff_id
   const decide = useStaffAction<{ id: string; decision: string; reason?: string }>((v) => `/offers/${v.id}/approval`, (v) => ({ decision: v.decision, reason: v.reason ?? null }))
   if (!a.offers.length) return null
   return (
@@ -236,13 +292,21 @@ function Offers({ a }: { a: Detail }) {
             <div className="mt-2 flex flex-wrap gap-2">{o.approvals.map((ap) => <Pill key={ap.level} tone={ap.decision === 'APPROVED' ? 'green' : 'red'}>L{ap.level} {humanize(ap.decision)}</Pill>)}</div>
             {o.candidate_message && <p className="mt-2 text-xs italic text-slate-600">Candidate: “{o.candidate_message}”</p>}
             {o.status === 'PENDING_APPROVAL' && o.next_level && (
-              <div className="mt-3 flex gap-2">
-                <Button busy={decide.isPending} onClick={() => decide.mutate({ id: o.offer_id, decision: 'APPROVED' })}>Approve level {o.next_level}</Button>
-                <Button variant="secondary" busy={decide.isPending} onClick={() => {
-                  const reason = window.prompt('Why are you rejecting this offer? (shared with HR)')
-                  if (reason && reason.trim().length >= 3) decide.mutate({ id: o.offer_id, decision: 'REJECTED', reason })
-                }}>Reject</Button>
-              </div>
+              o.next_approvers.some((ap) => ap.id === me) ? (
+                <div className="mt-3 flex gap-2">
+                  <Button busy={decide.isPending} onClick={() => decide.mutate({ id: o.offer_id, decision: 'APPROVED' })}>Approve level {o.next_level}</Button>
+                  <Button variant="secondary" busy={decide.isPending} onClick={() => {
+                    const reason = window.prompt('Why are you rejecting this offer? (shared with HR)')
+                    if (reason && reason.trim().length >= 3) decide.mutate({ id: o.offer_id, decision: 'REJECTED', reason })
+                  }}>Reject</Button>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-600">
+                  {o.next_approvers.length
+                    ? <>Waiting for level {o.next_level} approval by {o.next_approvers.map((ap) => `${ap.full_name}${ap.job_title ? ` (${ap.job_title})` : ''}`).join(' or ')}. They have been emailed an approval link.</>
+                    : <>Nobody can approve level {o.next_level}: give a staff member the APPROVER_L{o.next_level} role in the staff list.</>}
+                </p>
+              )
             )}
           </div>
         ))}
@@ -282,7 +346,11 @@ function Actions({ a }: { a: Detail }) {
   const [reason, setReason] = useState('')
   const [salary, setSalary] = useState('')
   const [joining, setJoining] = useState('')
-  const transition = useStaffAction<{ to: string }>(() => `/applications/${a.application_id}/transition`, (v) => ({ to_status: v.to, reason, expected_from: a.status }))
+  const [meeting, setMeeting] = useState(() => meetingValues(a.meeting_plan))
+  const transition = useStaffAction<{ to: string }>(() => `/applications/${a.application_id}/transition`, (v) => ({
+    to_status: v.to, reason, expected_from: a.status, ...(v.to === 'SHORTLISTED' ? { meeting: meetingPayload(meeting) } : {}),
+  }))
+  const canShortlist = a.staff_transitions.some((t) => t.to_status === 'SHORTLISTED')
   const offer = useStaffAction<void>(() => `/applications/${a.application_id}/offers`, () => ({
     ...(salary ? { monthly_salary: Number(salary.replace(/[^0-9]/g, '')) } : {}), ...(joining ? { joining_date: joining } : {}),
   }))
@@ -296,14 +364,25 @@ function Actions({ a }: { a: Detail }) {
   const section = (title: string, body: ReactNode) => <div className="space-y-3 border-t border-slate-100 pt-4 first:border-0 first:pt-0"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>{body}</div>
 
   if (closed) return <Card title="Actions"><p className="text-sm text-slate-600">This application is closed.</p></Card>
+  if (!a.permissions.can_manage) {
+    return <Card title="Actions"><p className="text-sm text-slate-600">Decisions on this application are made by HR, the recruiters and the hiring manager of the position.</p></Card>
+  }
   return (
     <Card title="Actions">
       <div className="space-y-4">
         <Field label="Reason" hint="Recorded with your name in the history."><Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+        {canShortlist && section('Interview meeting (needed to shortlist)', (
+          <>
+            <p className="text-xs text-slate-500">The candidate receives these details only after booking an interview time.</p>
+            <MeetingFields value={meeting} onChange={setMeeting} />
+          </>
+        ))}
         {a.staff_transitions.length > 0 && section('Decision', (
           <div className="flex flex-wrap gap-2">
             {a.staff_transitions.filter((t) => t.to_status !== 'WITHDRAWN').map((t) => (
-              <Button key={t.to_status} variant={t.to_status === 'REJECTED' ? 'danger' : 'primary'} disabled={!reasonOk} title={t.description}
+              <Button key={t.to_status} variant={t.to_status === 'REJECTED' ? 'danger' : 'primary'}
+                disabled={!reasonOk || (t.to_status === 'SHORTLISTED' && !meetingComplete(meeting))}
+                title={t.to_status === 'SHORTLISTED' && !meetingComplete(meeting) ? 'Enter the interview meeting details first' : t.description}
                 busy={transition.isPending && transition.variables?.to === t.to_status} onClick={() => transition.mutate({ to: t.to_status })}>
                 {DECISION_LABELS[t.to_status] ?? humanize(t.to_status)}
               </Button>

@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.links import LinkPurpose
 from app.domain.evaluation import InterviewDecision
@@ -153,12 +153,45 @@ class ApprovalRequest(BaseModel):
     level: int | None = Field(default=None, ge=1, le=2, description="Defaults to the next pending level")
 
 
+class MeetingMode(StrEnum):
+    ONLINE = "ONLINE"
+    ONSITE = "ONSITE"
+
+
+class MeetingDetails(BaseModel):
+    """How the candidate joins the interview. The candidate receives it only after booking a time."""
+
+    model_config = _STRICT
+
+    mode: MeetingMode = MeetingMode.ONLINE
+    meeting_url: str | None = Field(default=None, max_length=500, pattern=r"^https?://\S+$")
+    meeting_id: str | None = Field(default=None, max_length=100)
+    meeting_passcode: str | None = Field(default=None, max_length=100)
+    meeting_notes: str | None = Field(default=None, max_length=1000, description="Address or other instructions")
+
+    @field_validator("meeting_url", "meeting_id", "meeting_passcode", "meeting_notes", mode="before")
+    @classmethod
+    def _blank_is_none(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _complete(self) -> "MeetingDetails":
+        if self.mode is MeetingMode.ONLINE and not self.meeting_url:
+            raise ValueError("an online interview needs a meeting link (https://...)")
+        if self.mode is MeetingMode.ONSITE and not self.meeting_notes:
+            raise ValueError("an on-site interview needs the address or instructions")
+        return self
+
+
 class TransitionRequest(BaseModel):
     model_config = _STRICT
 
     to_status: str = Field(pattern=r"^[A-Z_]{3,40}$")
     reason: str = Field(min_length=3, max_length=1000)
     expected_from: str | None = Field(default=None, pattern=r"^[A-Z_]{3,40}$")
+    meeting: MeetingDetails | None = Field(
+        default=None, description="Interview meeting; required (here or saved before) to shortlist"
+    )
 
 
 class OfferTerms(BaseModel):

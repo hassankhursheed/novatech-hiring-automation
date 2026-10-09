@@ -1,5 +1,7 @@
 -- DEMO ONLY: compress business delays from days to minutes so reminders, expiries and escalations
 -- can be shown live. Enabled with DEMO_FAST_TIMERS=true. Never enable in production.
+-- Interview invitations still expire at a day boundary (the response deadline is midnight, after at least
+-- interview.min_choice_days days with open slots); only their reminder comes within minutes.
 UPDATE hiring.settings SET value = '"2 minutes"',  updated_by = 'demo_fast_timers' WHERE key = 'interview.invite_reminder_after';
 UPDATE hiring.settings SET value = '"5 minutes"',  updated_by = 'demo_fast_timers' WHERE key = 'interview.invite_expires_after';
 UPDATE hiring.settings SET value = '"2 minutes"',  updated_by = 'demo_fast_timers' WHERE key = 'interview.feedback_reminder_after';
