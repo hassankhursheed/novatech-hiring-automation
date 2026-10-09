@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-09T18:45:08.706Z",
+  "updatedAt": "2026-10-09T22:53:36.653Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf04Interview1",
   "name": "WF-04 Interview Management",
@@ -303,6 +303,30 @@
                 ],
                 "combinator": "and"
               }
+            },
+            {
+              "outputKey": "NOTIFY_INTERVIEW_CANCELLED",
+              "renameOutput": true,
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d9a872a8-9e3a-5e17-a036-29126e41480c",
+                    "leftValue": "={{ $(\"Build Context\").first().json.action.action_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "NOTIFY_INTERVIEW_CANCELLED"
+                  }
+                ],
+                "combinator": "and"
+              }
             }
           ]
         },
@@ -382,13 +406,13 @@
             {
               "id": "b359a5a9-7e0b-5f71-ada4-e7880b097c99",
               "name": "action_outcome",
-              "value": "={{ [\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\", \"Send Meeting Details (SWF-02)\", \"Update Interviewer (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
+              "value": "={{ [\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\", \"Send Meeting Details (SWF-02)\", \"Update Interviewer (SWF-02)\", \"Cancellation to Interviewer (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"FAILED\" : \"DONE\" }}",
               "type": "string"
             },
             {
               "id": "c31a272b-181f-5170-aec1-1f9928611a06",
               "name": "action_reason",
-              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\", \"Send Meeting Details (SWF-02)\", \"Update Interviewer (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
+              "value": "={{ $(\"Build Context\").first().json.action.action_type + \": \" + ([\"Send Invitation (SWF-02)\", \"Send Invitation Reminder (SWF-02)\", \"Confirm to Candidate (SWF-02)\", \"Brief Interviewer (SWF-02)\", \"Remind Interviewer (SWF-02)\", \"Escalate to HR (SWF-02)\", \"Send Meeting Details (SWF-02)\", \"Update Interviewer (SWF-02)\", \"Cancellation to Interviewer (SWF-02)\"].some(n => $(n).isExecuted && $(n).first().json.status === \"FAILED\") ? \"a message could not be sent (will retry)\" : ($json.duplicate_suppressed ? \"message already sent earlier\" : \"message sent\")) }}",
               "type": "string"
             }
           ]
@@ -2901,13 +2925,180 @@
       }
     },
     {
+      "id": "46389a44-5b8f-5253-ac58-56f958e93c46",
+      "name": "Interview Cancelled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        1920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bb6174ce-3f08-5575-ad15-55b9f4523019",
+              "leftValue": "={{ Boolean($(\"Start Log & Load State\").first().json.interview?.status === \"CANCELLED\" && $(\"Start Log & Load State\").first().json.interview?.scheduled_start) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1125fe85-497b-546e-abcc-7606b8d4a3e0",
+      "name": "Cancellation to Interviewer (SWF-02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        2120
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zNrGlzM4KLrFVMAo",
+          "cachedResultName": "SWF-02 Send Notification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ctx": "={{ $(\"Build Context\").first().json.ctx }}",
+            "dedupe_key": "={{ \"interview.cancelled_interviewer:\" + $(\"Start Log & Load State\").first().json.interview.interview_id }}",
+            "channel": "EMAIL",
+            "template_key": "interview.cancelled_interviewer",
+            "recipient": "={{ $(\"Start Log & Load State\").first().json.interview.interviewer.email }}",
+            "subject": "={{ \"Interview cancelled: \" + $(\"Start Log & Load State\").first().json.app.candidate.full_name + \", \" + DateTime.fromISO($(\"Start Log & Load State\").first().json.interview.scheduled_start).setZone($(\"Start Log & Load State\").first().json.timezone).toFormat(\"d LLL, h:mm a\") }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const fmt = (iso, tz) => iso ? DateTime.fromISO(String(iso)).setZone(tz || \"Asia/Karachi\").toFormat(\"cccc d LLLL yyyy, h:mm a\") : \"-\"; const fmtDate = (iso) => iso ? DateTime.fromISO(String(iso)).toFormat(\"d LLLL yyyy\") : \"-\"; const s = $(\"Start Log & Load State\").first().json; const iv = s.interview; const closed = [\"REJECTED\", \"WITHDRAWN\", \"DECLINED\", \"OFFER_EXPIRED\"].includes(s.app.status); return layout(\"<p>Hi \" + esc(iv.interviewer.full_name) + \",</p><p>Your interview with <b>\" + esc(s.app.candidate.full_name) + \"</b> (\" + esc(s.app.application_code) + \", \" + esc(s.app.position.title) + \") on <b>\" + esc(fmt(iv.scheduled_start, s.timezone)) + \"</b> has been <b>cancelled</b>. Please remove it from your calendar; the time is open for other candidates again.</p><p>\" + (closed ? \"The application is closed (\" + esc(String(s.app.status).toLowerCase().replace(\"_\", \" \")) + \").\" : \"The candidate will choose a new time; you will receive a new brief once they book.\") + \"</p>\", \"Interview \" + esc(iv.interview_code)); })() }}",
+            "application_id": "={{ $(\"Start Log & Load State\").first().json.app.application_id }}",
+            "entity_type": "INTERVIEW",
+            "entity_id": "={{ $(\"Start Log & Load State\").first().json.interview.interview_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ctx",
+              "displayName": "ctx",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "object"
+            },
+            {
+              "id": "dedupe_key",
+              "displayName": "dedupe_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "template_key",
+              "displayName": "template_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "recipient",
+              "displayName": "recipient",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "html",
+              "displayName": "html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_type",
+              "displayName": "entity_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "entity_id",
+              "displayName": "entity_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
       "id": "e58df9d1-768d-56fe-a2f8-b2bbf4af0666",
       "name": "Result: Unknown Action",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
         1280,
-        1920
+        2120
       ],
       "parameters": {
         "mode": "manual",
@@ -2940,9 +3131,9 @@
         200
       ],
       "parameters": {
-        "content": "## WF-04 Interview Management\nCalled by **WF-00** for interview actions. Every branch re-checks the current state first; a stale timer is **SKIPPED**.\n\n### Invitation\n- `api.create_interview_invitation` (idempotent per round) → signed slot link → email to the candidate.\n- **Response deadline**: midnight after `interview.invite_expires_after`, moved out until the candidate can choose from `interview.min_choice_days` days. Only slots on days **before** the deadline are offered; the expiry timer runs at the deadline, the reminder a day before.\n- Slots come from each interviewer's weekly availability (`hiring.interviewer_availability`).\n\n### Booking\n- The candidate picks a slot in the portal (`api.confirm_interview_slot`).\n- This workflow records the calendar event, confirms to the candidate **with the meeting details** (link, meeting ID, passcode, or on-site instructions, entered by staff when they shortlist) and briefs the interviewer with a scorecard link.\n- **Meeting changes** (`SEND_MEETING_DETAILS`): when staff change the meeting of a booked interview, the candidate and the interviewer get the new details.\n- **AI interview questions**: n8n's own Mistral credential drafts 5 role-specific questions for the brief (no personal data; the brief is sent without them if the model is unavailable).\n\n### Feedback\n- Reminder, then escalation to HR. Submitting the scorecard (link or HR portal) cancels both timers.\n\n### Evaluation\n1. **AI interview assessment** (backend, Mistral): reads ratings, comments and screening results; recorded with `api.record_interview_assessment`.\n2. **Weighted score** (30 % screening + 70 % interview; weights and thresholds are settings).\n3. The AI can only add a hiring-manager review (disagreement, or comments that contradict the ratings) → `api.apply_interview_decision`.\n\nRetryable failures return FAILED (dispatcher backoff); permanent ones go to the error queue (SWF-03). Emails are sent at most once per dedupe key.",
+        "content": "## WF-04 Interview Management\nCalled by **WF-00** for interview actions. Every branch re-checks the current state first; a stale timer is **SKIPPED**.\n\n### Invitation\n- `api.create_interview_invitation` (idempotent per round) → signed slot link → email to the candidate.\n- **Response deadline**: midnight after `interview.invite_expires_after`, moved out until the candidate can choose from `interview.min_choice_days` days. Only slots on days **before** the deadline are offered; the expiry timer runs at the deadline, the reminder a day before.\n- Slots come from each interviewer's weekly availability (`hiring.interviewer_availability`).\n\n### Booking\n- The candidate picks a slot in the portal (`api.confirm_interview_slot`).\n- This workflow records the calendar event, confirms to the candidate **with the meeting details** (link, meeting ID, passcode, or on-site instructions, entered by staff when they shortlist) and briefs the interviewer with a scorecard link.\n- **Meeting changes** (`SEND_MEETING_DETAILS`): when staff change the meeting of a booked interview, the candidate and the interviewer get the new details.\n- **Cancellations** (`NOTIFY_INTERVIEW_CANCELLED`): whoever cancels a booked interview (candidate, staff, withdrawal, rejection), the interviewer is told the time is free again.\n- **AI interview questions**: n8n's own Mistral credential drafts 5 role-specific questions for the brief (no personal data; the brief is sent without them if the model is unavailable).\n\n### Feedback\n- Reminder, then escalation to HR. Submitting the scorecard (link or HR portal) cancels both timers.\n\n### Evaluation\n1. **AI interview assessment** (backend, Mistral): reads ratings, comments and screening results; recorded with `api.record_interview_assessment`.\n2. **Weighted score** (30 % screening + 70 % interview; weights and thresholds are settings).\n3. The AI can only add a hiring-manager review (disagreement, or comments that contradict the ratings) → `api.apply_interview_decision`.\n\nRetryable failures return FAILED (dispatcher backoff); permanent ones go to the error queue (SWF-03). Emails are sent at most once per dedupe key.",
         "width": 680,
-        "height": 960,
+        "height": 1040,
         "color": 5
       }
     },
@@ -2953,7 +3144,7 @@
       "typeVersion": 1,
       "position": [
         -540,
-        1200
+        1280
       ],
       "parameters": {
         "content": "## Setup: Mistral credential\nThe node **Mistral Chat Model** uses the n8n credential **Mistral AI (n8n)**, with n8n's own key (not the backend key).\n1. Put the key in `.env` as `N8N_MISTRAL_API_KEY`.\n2. Run `sh scripts/n8n-mistral-key.sh` (Windows: `scripts\\n8n-mistral-key.ps1`). Or: **Credentials** → **Mistral AI (n8n)** → paste the key → **Save**.\n\nModel: `ministral-8b-latest`. Mistral limits apply per workspace and per model; the backend uses `ministral-14b`, so this model has its own budget (188 requests/min on a free key). Without a key the interviewer brief is still sent, just without the suggested questions.",
@@ -3113,6 +3304,13 @@
         [
           {
             "node": "Still Booked?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Interview Cancelled?",
             "type": "main",
             "index": 0
           }
@@ -3648,6 +3846,35 @@
         ]
       ]
     },
+    "Interview Cancelled?": {
+      "main": [
+        [
+          {
+            "node": "Cancellation to Interviewer (SWF-02)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip: No Longer Applies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancellation to Interviewer (SWF-02)": {
+      "main": [
+        [
+          {
+            "node": "Result: Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Result: Unknown Action": {
       "main": [
         [
@@ -3670,9 +3897,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "e9b1643c-1b5c-45be-868d-a90650e5f59b",
-  "activeVersionId": "e9b1643c-1b5c-45be-868d-a90650e5f59b",
-  "versionCounter": 8,
+  "versionId": "96df9ba2-4af3-4266-bf99-6abc005c6784",
+  "activeVersionId": "96df9ba2-4af3-4266-bf99-6abc005c6784",
+  "versionCounter": 10,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

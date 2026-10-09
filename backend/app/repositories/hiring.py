@@ -35,18 +35,13 @@ class HiringRepository:
 
     # ---- interviews -----------------------------------------------------------------------------------
     async def interview_for_candidate(self, interview_id: str, candidate_id: str) -> dict[str, Any]:
-        # Meeting details are only shown once the candidate has booked a time.
+        # The page only lets the candidate choose or cancel a time. The interview time and the meeting details are
+        # sent by email (confirmation, and again if they change), never shown on the page.
         row = await self._db.fetch_one(
-            """SELECT i.id::text AS interview_id, i.interview_code, i.round, i.status, i.mode,
-                      i.scheduled_start, i.scheduled_end, a.application_code,
-                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_url END AS meeting_url,
-                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_id END AS meeting_id,
-                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_passcode END
-                        AS meeting_passcode,
-                      CASE WHEN i.status IN ('CONFIRMED', 'COMPLETED') THEN i.meeting_notes END AS meeting_notes,
+            """SELECT i.id::text AS interview_id, i.interview_code, i.round, i.status, a.application_code,
                       a.status AS application_status,
                       c.id::text AS candidate_id, split_part(c.full_name, ' ', 1) AS first_name,
-                      p.title AS position_title, s.full_name AS interviewer_name,
+                      p.title AS position_title,
                       coalesce(i.respond_by,
                                (SELECT sa.run_at FROM ops.scheduled_actions sa
                                  WHERE sa.entity_id = i.id AND sa.action_type = 'INTERVIEW_INVITE_EXPIRY'
@@ -56,7 +51,6 @@ class HiringRepository:
                  JOIN hiring.applications a ON a.id = i.application_id
                  JOIN hiring.candidates c ON c.id = a.candidate_id
                  JOIN hiring.job_positions p ON p.id = a.job_position_id
-                 JOIN hiring.staff_members s ON s.id = i.interviewer_id
                 WHERE i.id = %s""",
             (interview_id,),
         )

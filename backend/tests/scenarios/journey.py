@@ -132,18 +132,17 @@ class Journey:
         token = h.link_token(email, "Interview invitation")
         view = h.portal("GET", "interview", token).json()
         slot = view["slots"][0]
-        hidden = view.get("meeting_url") is None  # meeting details are not shown before the booking
         confirmed = h.portal("POST", "interview/confirm", token, {"slot_id": slot["slot_id"]})
         status = self.wait_status(app_id, {"INTERVIEW_SCHEDULED"})
         confirmation = self.inbox(email, "Interview confirmed")
         booked = h.portal("GET", "interview", token).json()
+        emailed = bool(confirmation) and JOURNEY_MEETING["meeting_url"] in h.email_html(confirmation[0])
         self.step(
             "3 Interview booked",
             confirmed.status_code == 200
             and status == "INTERVIEW_SCHEDULED"
-            and bool(confirmation)
-            and hidden
-            and booked.get("meeting_url") == JOURNEY_MEETING["meeting_url"],
+            and emailed
+            and "meeting_url" not in booked,  # the page never shows the time or the meeting details
             f"invitation email -> slot {slot['starts_at']} booked (before {view['respond_by']}) -> confirmation email "
             "with the meeting details",
         )

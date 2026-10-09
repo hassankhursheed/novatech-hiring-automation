@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-05T23:37:46.824Z",
+  "updatedAt": "2026-10-09T22:53:56.329Z",
   "createdAt": "2026-10-01T21:02:46.801Z",
   "id": "ntWf08Monitoring",
   "name": "WF-08 Monitoring & Reporting",
@@ -841,7 +841,7 @@
             "dedupe_key": "={{ \"review.queue:\" + $(\"Review Context\").first().json.action.id }}",
             "channel": "EMAIL",
             "template_key": "staff.review_needed",
-            "recipient": "={{ $json.app.status === \"INTERVIEW_REVIEW\" ? ($json.hiring_manager_email || $json.recruiters) : $json.recruiters }}",
+            "recipient": "={{ $json.app.status === \"INTERVIEW_REVIEW\" ? [...new Set([$json.hiring_manager_email, ...String($json.recruiters || \"\").split(\",\")].filter(Boolean))].join(\",\") : $json.recruiters }}",
             "subject": "={{ \"[Action needed] \" + $json.app.application_code + \" \" + ($json.app.status === \"INTERVIEW_REVIEW\" ? \"needs a hiring decision\" : \"needs a screening review\") }}",
             "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const a = $json.app; const n = v => v === null || v === undefined ? \"-\" : esc(v); const link = String($json.portal_url || \"\").replace(/\\/$/, \"\") + \"/staff/applications/\" + a.application_id; return layout(\"<p>An application needs a human decision.</p><table cellpadding='5' style='border-collapse:collapse'>\" + [[\"Application\", a.application_code], [\"Candidate\", a.candidate.full_name], [\"Position\", a.position.title], [\"Status\", a.status], [\"Reason\", a.review_reason], [\"Screening score\", a.application_score], [\"AI recommendation (advisory)\", a.ai_recommendation], [\"Interview score\", a.interview_score], [\"Final score\", a.final_score]].map(r => \"<tr><td style='color:#667085'>\" + r[0] + \"</td><td><b>\" + n(r[1]) + \"</b></td></tr>\").join(\"\") + \"</table><p><a href='\" + esc(link) + \"'>Open the application</a> to decide. Decisions are recorded with your name and reason.</p>\", \"Correlation id \" + esc(a.correlation_id)); })() }}",
             "application_id": "={{ $json.app.application_id }}",
@@ -1035,7 +1035,7 @@
         200
       ],
       "parameters": {
-        "content": "## WF-08 Monitoring & Reporting\n\n### Daily report (09:00 company time)\n- On demand: `POST /webhook/ops/daily-report` (header auth) with `{\"report_date\": \"YYYY-MM-DD\", \"force\": false}`.\n- Every number comes from `reporting.daily_metrics`. The backend writes the prose (Mistral) and rejects any AI text that contains a number that is not in the metrics.\n- One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).\n\n### Review alerts (`NOTIFY_REVIEW_QUEUE`)\n- Emails recruiters (screening review) or the hiring manager (interview review), after re-checking that the case still needs a person.",
+        "content": "## WF-08 Monitoring & Reporting\n\n### Daily report (09:00 company time)\n- On demand: `POST /webhook/ops/daily-report` (header auth) with `{\"report_date\": \"YYYY-MM-DD\", \"force\": false}`.\n- Every number comes from `reporting.daily_metrics`. The backend writes the prose (Mistral) and rejects any AI text that contains a number that is not in the metrics.\n- One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).\n\n### Review alerts (`NOTIFY_REVIEW_QUEUE`)\n- Emails recruiters and HR (screening review), or the hiring manager plus recruiters and HR (interview review), after re-checking that the case still needs a person.",
         "width": 680,
         "height": 380,
         "color": 5
@@ -1286,9 +1286,9 @@
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "38c3207a-5686-4177-8069-bd27c7450caf",
-  "activeVersionId": "38c3207a-5686-4177-8069-bd27c7450caf",
-  "versionCounter": 2,
+  "versionId": "c70c5b88-01d1-4056-8013-1e041716c8ce",
+  "activeVersionId": "c70c5b88-01d1-4056-8013-1e041716c8ce",
+  "versionCounter": 4,
   "triggerCount": 2,
   "sourceWorkflowId": null,
   "tags": [],

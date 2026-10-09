@@ -46,6 +46,7 @@ export const NOTES = {
     '',
     '### Rejection notice (`SEND_REJECTION_NOTICE`)',
     '- Re-checks that the application is still `REJECTED` before emailing.',
+    '- The wording follows how far the candidate got: screening, invited (the invitation is no longer valid) or interviewed.',
     '',
     '### Status updates (`NOTIFY_CANDIDATE`)',
     '- Queued by the database together with the status change (`application_statuses.candidate_notice`): under review, interview completed, selected, onboarding finished, withdrawn.',
@@ -83,6 +84,7 @@ export const NOTES = {
     '- The candidate picks a slot in the portal (`api.confirm_interview_slot`).',
     '- This workflow records the calendar event, confirms to the candidate **with the meeting details** (link, meeting ID, passcode, or on-site instructions, entered by staff when they shortlist) and briefs the interviewer with a scorecard link.',
     '- **Meeting changes** (`SEND_MEETING_DETAILS`): when staff change the meeting of a booked interview, the candidate and the interviewer get the new details.',
+    '- **Cancellations** (`NOTIFY_INTERVIEW_CANCELLED`): whoever cancels a booked interview (candidate, staff, withdrawal, rejection), the interviewer is told the time is free again.',
     '- **AI interview questions**: n8n\'s own Mistral credential drafts 5 role-specific questions for the brief (no personal data; the brief is sent without them if the model is unavailable).',
     '',
     '### Feedback',
@@ -166,7 +168,7 @@ export const NOTES = {
     '- One report per date (`api.save_daily_report`), emailed at most once (`report.daily:<date>`).',
     '',
     '### Review alerts (`NOTIFY_REVIEW_QUEUE`)',
-    '- Emails recruiters (screening review) or the hiring manager (interview review), after re-checking that the case still needs a person.',
+    '- Emails recruiters and HR (screening review), or the hiring manager plus recruiters and HR (interview review), after re-checking that the case still needs a person.',
   ), 5],
 
   'WF-09': [lines(

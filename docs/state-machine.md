@@ -65,7 +65,9 @@ arrows are omitted above for readability.
 6. **Side effects in the same transaction.**
    * A history row and an audit log entry are written.
    * The status's `on_enter_action` is enqueued (outbox).
-   * Entering a terminal status cancels pending timers.
+   * Entering a terminal status cancels pending timers, cancels the application's open interviews (a booked slot
+     is free again and the interviewer is told) and withdraws an open offer, so a closed application leaves no
+     link that still offers slots or terms.
 7. **Human decisions need a reason** (`REASON_REQUIRED`).
 
 ## Who may do what

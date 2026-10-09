@@ -46,12 +46,13 @@ export default function build() {
   w.add(route('Route by Action Type', '$("Build Context").first().json.action.action_type', [
     'INVITE_TO_INTERVIEW', 'INTERVIEW_INVITE_REMINDER', 'INTERVIEW_INVITE_EXPIRY', 'FINALIZE_INTERVIEW_BOOKING',
     'FEEDBACK_REMINDER', 'FEEDBACK_ESCALATION', 'EVALUATE_INTERVIEW', 'SEND_MEETING_DETAILS',
+    'NOTIFY_INTERVIEW_CANCELLED',
   ]));
   w.chain('When Called by Dispatcher', 'Build Context', 'Start Log & Load State', 'Route by Action Type');
 
   const EMAILS = ['Send Invitation (SWF-02)', 'Send Invitation Reminder (SWF-02)', 'Confirm to Candidate (SWF-02)',
     'Brief Interviewer (SWF-02)', 'Remind Interviewer (SWF-02)', 'Escalate to HR (SWF-02)',
-    'Send Meeting Details (SWF-02)', 'Update Interviewer (SWF-02)'];
+    'Send Meeting Details (SWF-02)', 'Update Interviewer (SWF-02)', 'Cancellation to Interviewer (SWF-02)'];
   const tail = addHandlerTail(w, 'WF-04', EMAILS);
   const dbFail = (node) => w.connect(node, tail.failed, 1);
 
@@ -255,12 +256,26 @@ export default function build() {
   }));
   w.chain('Still Booked?', 'Send Meeting Details (SWF-02)', 'Update Interviewer (SWF-02)', tail.notified);
 
+  // ---- 8: NOTIFY_INTERVIEW_CANCELLED (a booked interview was cancelled: candidate, staff, withdrawal, closure) ------
+  w.add(when('Interview Cancelled?', `${S}.interview?.status === "CANCELLED" && ${S}.interview?.scheduled_start`));
+  w.connect('Route by Action Type', 'Interview Cancelled?', 8);
+  w.connect('Interview Cancelled?', tail.skip, 1);
+  w.add(email('Cancellation to Interviewer (SWF-02)', {
+    ctx: CTX, template: 'interview.cancelled_interviewer', entityType: 'INTERVIEW',
+    dedupe: `"interview.cancelled_interviewer:" + ${S}.interview.interview_id`,
+    recipient: `${S}.interview.interviewer.email`,
+    subject: `"Interview cancelled: " + ${S}.app.candidate.full_name + ", " + DateTime.fromISO(${S}.interview.scheduled_start).setZone(${S}.timezone).toFormat("d LLL, h:mm a")`,
+    html: `(() => { ${H} const s = ${S}; const iv = s.interview; const closed = ["REJECTED", "WITHDRAWN", "DECLINED", "OFFER_EXPIRED"].includes(s.app.status); return layout("<p>Hi " + esc(iv.interviewer.full_name) + ",</p><p>Your interview with <b>" + esc(s.app.candidate.full_name) + "</b> (" + esc(s.app.application_code) + ", " + esc(s.app.position.title) + ") on <b>" + esc(fmt(iv.scheduled_start, s.timezone)) + "</b> has been <b>cancelled</b>. Please remove it from your calendar; the time is open for other candidates again.</p><p>" + (closed ? "The application is closed (" + esc(String(s.app.status).toLowerCase().replace("_", " ")) + ")." : "The candidate will choose a new time; you will receive a new brief once they book.") + "</p>", "Interview " + esc(iv.interview_code)); })()`,
+    applicationId: `${S}.app.application_id`, entityId: `${S}.interview.interview_id`,
+  }));
+  w.chain('Interview Cancelled?', 'Cancellation to Interviewer (SWF-02)', tail.notified);
+
   // ---- fallback --------------------------------------------------------------------------------------------
   w.add(set('Result: Unknown Action', [
     ['action_outcome', 'FAILED'],
     ['action_reason', x('"WF-04 has no handler for " + $("Build Context").first().json.action.action_type')],
   ]));
-  w.connect('Route by Action Type', 'Result: Unknown Action', 8);
+  w.connect('Route by Action Type', 'Result: Unknown Action', 9);
   w.connect('Result: Unknown Action', tail.finish);
 
   addNotes(w, 'WF-04');
