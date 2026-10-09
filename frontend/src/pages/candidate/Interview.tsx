@@ -1,31 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Narrow } from '../../components/layout'
-import { MeetingSummary } from '../../components/meeting'
-import { Alert, Button, Card, Field, KeyValue, Loading, StatusBadge, Textarea, cx } from '../../components/ui'
+import { Alert, Button, Card, Field, Loading, StatusBadge, Textarea, cx } from '../../components/ui'
 import { api, explain, MISSING_LINK } from '../../lib/api'
 import { TIMEZONE } from '../../lib/config'
-import { formatDateTime, humanize } from '../../lib/format'
 import { useLinkToken } from '../../lib/session'
 
 interface Slot { slot_id: string; starts_at: string; ends_at: string }
+// The interview time and meeting details are only ever sent by email, never shown here.
 interface InterviewView {
   interview_code: string
   round: number
   status: string
-  mode: string
-  scheduled_start: string | null
-  scheduled_end: string | null
-  meeting_url: string | null
-  meeting_id: string | null
-  meeting_passcode: string | null
-  meeting_notes: string | null
   application_code: string
   first_name: string
   position_title: string
-  interviewer_name: string
   respond_by: string | null
   slots: Slot[]
+}
+
+const CLOSED_MESSAGES: Record<string, string> = {
+  COMPLETED: 'Thank you for attending your interview. We will email you about the next steps.',
+  CANCELLED: 'This interview is cancelled. Please check your email for the latest update.',
+  EXPIRED: 'This invitation expired before a time was chosen. Please check your email or contact the recruitment team.',
+  NO_SHOW: 'We missed you at the interview. Please check your email for the latest update.',
 }
 
 const dayFormat = new Intl.DateTimeFormat('en-GB', { timeZone: TIMEZONE, weekday: 'long', day: 'numeric', month: 'long' })
@@ -67,7 +65,7 @@ export default function Interview() {
   return (
     <Narrow
       title={`Interview for ${iv.position_title}`}
-      subtitle={<>Hi {iv.first_name}, this is your personal interview page (reference {iv.application_code}). Times are shown in {TIMEZONE.replace('_', ' ')} time.</>}
+      subtitle={<>Hi {iv.first_name}, this is your personal interview page (reference {iv.application_code}).{iv.status === 'INVITED' ? ` Times are shown in ${TIMEZONE.replace('_', ' ')} time.` : ''}</>}
     >
       {iv.status === 'INVITED' && (
         <Card title="Choose a time">
@@ -99,15 +97,7 @@ export default function Interview() {
 
       {iv.status === 'CONFIRMED' && (
         <>
-          <Alert tone="success" title="Your interview is confirmed">A confirmation with a calendar link was emailed to you.</Alert>
-          <Card title="Details">
-            <KeyValue items={[
-              ['When', formatDateTime(iv.scheduled_start)],
-              ['Format', iv.mode === 'ONSITE' ? 'At the office' : 'Online'],
-              ['Interviewer', iv.interviewer_name],
-              [iv.mode === 'ONSITE' ? 'Where' : 'How to join', <MeetingSummary key="meeting" meeting={iv} missing="We will email you the meeting details before the interview." />],
-            ]} />
-          </Card>
+          <Alert tone="success" title="Your interview is booked">We have emailed you the date, the time and how to join. Please keep that email.</Alert>
           <Card title="Can't make it?">
             <p className="text-sm text-slate-600">Cancel so the time can be offered to someone else. We will send you a new invitation.</p>
             <div className="mt-4"><Field label="Reason" required><Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></Field></div>
@@ -119,7 +109,7 @@ export default function Interview() {
 
       {!['INVITED', 'CONFIRMED'].includes(iv.status) && (
         <Card>
-          <div className="flex items-center gap-3"><StatusBadge status={iv.status} /><span className="text-sm text-slate-600">This interview is {humanize(iv.status).toLowerCase()}. Please check your email for the latest updates.</span></div>
+          <div className="flex items-center gap-3"><StatusBadge status={iv.status} /><span className="text-sm text-slate-600">{CLOSED_MESSAGES[iv.status] ?? 'Please check your email for the latest update.'}</span></div>
         </Card>
       )}
     </Narrow>

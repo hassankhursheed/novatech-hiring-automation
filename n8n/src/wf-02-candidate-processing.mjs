@@ -88,14 +88,18 @@ export default function build() {
   w.connect('Has Valid Email?', 'Finish Execution Log', 1);
 
   // ---- SEND_REJECTION_NOTICE (WF-00) ----------------------------------------------------------------------
-  w.add(pg('Load Application State', 'SELECT api.application_snapshot($1::uuid) AS app', ['$json.action.application_id']));
+  // stage: SCREENING (never invited), INVITED (invited or booked, not interviewed) or INTERVIEWED.
+  w.add(pg('Load Application State', `SELECT api.application_snapshot($1::uuid) AS app,
+       CASE WHEN EXISTS (SELECT 1 FROM hiring.interviews i WHERE i.application_id = $1::uuid AND i.status = 'COMPLETED') THEN 'INTERVIEWED'
+            WHEN EXISTS (SELECT 1 FROM hiring.interviews i WHERE i.application_id = $1::uuid) THEN 'INVITED'
+            ELSE 'SCREENING' END AS stage`, ['$json.action.application_id']));
   w.add(when('Still Rejected With Email?', '$json.app?.status === "REJECTED" && $json.app?.candidate?.email'));
   w.add(email('Send Rejection Notice (SWF-02)', {
     ctx: `${BC}.ctx`, template: 'application.rejected', entityType: 'APPLICATION',
     dedupe: '"candidate.rejection:" + $json.app.application_id',
     recipient: '$json.app.candidate.email',
     subject: '"Your application for " + $json.app.position.title + " at " + $json.app.company.name',
-    html: `(() => { ${ESC} ${LAYOUT} const a = $json.app; return layout("<p>Dear " + esc(a.candidate.full_name) + ",</p><p>Thank you for your interest in the <b>" + esc(a.position.title) + "</b> role (reference " + esc(a.application_code) + ") and for the time you put into your application.</p><p>After careful review we have decided not to move forward with your application at this time. This was not an easy decision, and we encourage you to apply for future openings that match your experience.</p><p>Kind regards,<br/>" + esc(a.company.name) + " Talent Team</p>", "Reference " + esc(a.application_code)); })()`,
+    html: `(() => { ${ESC} ${LAYOUT} const a = $json.app; const role = "<b>" + esc(a.position.title) + "</b> role (reference " + esc(a.application_code) + ")"; const opening = { INTERVIEWED: "<p>Thank you for taking the time to interview with us for the " + role + ". We enjoyed learning about your experience.</p><p>After careful consideration of all the interviews, we have decided not to move forward with your application at this time.", INVITED: "<p>Thank you for your interest in the " + role + ".</p><p>After a further review we have decided not to move forward with your application at this time, so the interview invitation we sent you is no longer valid.", SCREENING: "<p>Thank you for your interest in the " + role + " and for the time you put into your application.</p><p>After careful review we have decided not to move forward with your application at this time." }[$json.stage] || ""; return layout("<p>Dear " + esc(a.candidate.full_name) + ",</p>" + opening + " This was not an easy decision, and we encourage you to apply for future openings that match your experience.</p><p>Kind regards,<br/>" + esc(a.company.name) + " Talent Team</p>", "Reference " + esc(a.application_code)); })()`,
     applicationId: '$json.app.application_id', entityId: '$json.app.application_id',
   }));
   w.add(set('Return Action Result', [

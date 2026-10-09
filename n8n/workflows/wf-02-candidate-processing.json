@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-05T23:37:02.042Z",
+  "updatedAt": "2026-10-09T22:53:17.631Z",
   "createdAt": "2026-10-01T20:02:35.586Z",
   "id": "76ahG9hzRP7cuQL4",
   "name": "WF-02 Candidate Processing",
@@ -592,7 +592,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT api.application_snapshot($1::uuid) AS app",
+        "query": "SELECT api.application_snapshot($1::uuid) AS app,\n       CASE WHEN EXISTS (SELECT 1 FROM hiring.interviews i WHERE i.application_id = $1::uuid AND i.status = 'COMPLETED') THEN 'INTERVIEWED'\n            WHEN EXISTS (SELECT 1 FROM hiring.interviews i WHERE i.application_id = $1::uuid) THEN 'INVITED'\n            ELSE 'SCREENING' END AS stage",
         "options": {
           "queryReplacement": "={{ [ $json.action.application_id ] }}"
         }
@@ -665,7 +665,7 @@
             "template_key": "application.rejected",
             "recipient": "={{ $json.app.candidate.email }}",
             "subject": "={{ \"Your application for \" + $json.app.position.title + \" at \" + $json.app.company.name }}",
-            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const a = $json.app; return layout(\"<p>Dear \" + esc(a.candidate.full_name) + \",</p><p>Thank you for your interest in the <b>\" + esc(a.position.title) + \"</b> role (reference \" + esc(a.application_code) + \") and for the time you put into your application.</p><p>After careful review we have decided not to move forward with your application at this time. This was not an easy decision, and we encourage you to apply for future openings that match your experience.</p><p>Kind regards,<br/>\" + esc(a.company.name) + \" Talent Team</p>\", \"Reference \" + esc(a.application_code)); })() }}",
+            "html": "={{ (() => { const esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" })[c]); const layout = (body, footer) => \"<div style='font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1d2939;max-width:640px'>\" + body + \"<p style='margin-top:24px;color:#667085;font-size:12px'>\" + (footer || \"NovaTech Solutions\") + \"</p></div>\"; const a = $json.app; const role = \"<b>\" + esc(a.position.title) + \"</b> role (reference \" + esc(a.application_code) + \")\"; const opening = { INTERVIEWED: \"<p>Thank you for taking the time to interview with us for the \" + role + \". We enjoyed learning about your experience.</p><p>After careful consideration of all the interviews, we have decided not to move forward with your application at this time.\", INVITED: \"<p>Thank you for your interest in the \" + role + \".</p><p>After a further review we have decided not to move forward with your application at this time, so the interview invitation we sent you is no longer valid.\", SCREENING: \"<p>Thank you for your interest in the \" + role + \" and for the time you put into your application.</p><p>After careful review we have decided not to move forward with your application at this time.\" }[$json.stage] || \"\"; return layout(\"<p>Dear \" + esc(a.candidate.full_name) + \",</p>\" + opening + \" This was not an easy decision, and we encourage you to apply for future openings that match your experience.</p><p>Kind regards,<br/>\" + esc(a.company.name) + \" Talent Team</p>\", \"Reference \" + esc(a.application_code)); })() }}",
             "application_id": "={{ $json.app.application_id }}",
             "entity_type": "APPLICATION",
             "entity_id": "={{ $json.app.application_id }}"
@@ -1121,9 +1121,9 @@
         200
       ],
       "parameters": {
-        "content": "## WF-02 Candidate Processing\nStores every submission and makes sure the candidate **hears from us at every step**.\n\n### Intake (called by WF-01)\n- `api.submit_application` runs one transaction: candidate upsert, duplicate check, application `NEW → VALIDATING → VALIDATED / SCREENING_REVIEW`.\n- A replayed event returns its stored result; the acknowledgement goes out once per event (SWF-02 dedupe key).\n\n### Rejection notice (`SEND_REJECTION_NOTICE`)\n- Re-checks that the application is still `REJECTED` before emailing.\n\n### Status updates (`NOTIFY_CANDIDATE`)\n- Queued by the database together with the status change (`application_statuses.candidate_notice`): under review, interview completed, selected, onboarding finished, withdrawn.\n- Skipped when a later step already emailed the candidate, so emails never arrive out of order.\n- Internal reasons are never part of a candidate email.\n\nFailures go to SWF-03 with replay target WF-02.",
+        "content": "## WF-02 Candidate Processing\nStores every submission and makes sure the candidate **hears from us at every step**.\n\n### Intake (called by WF-01)\n- `api.submit_application` runs one transaction: candidate upsert, duplicate check, application `NEW → VALIDATING → VALIDATED / SCREENING_REVIEW`.\n- A replayed event returns its stored result; the acknowledgement goes out once per event (SWF-02 dedupe key).\n\n### Rejection notice (`SEND_REJECTION_NOTICE`)\n- Re-checks that the application is still `REJECTED` before emailing.\n- The wording follows how far the candidate got: screening, invited (the invitation is no longer valid) or interviewed.\n\n### Status updates (`NOTIFY_CANDIDATE`)\n- Queued by the database together with the status change (`application_statuses.candidate_notice`): under review, interview completed, selected, onboarding finished, withdrawn.\n- Skipped when a later step already emailed the candidate, so emails never arrive out of order.\n- Internal reasons are never part of a candidate email.\n\nFailures go to SWF-03 with replay target WF-02.",
         "width": 680,
-        "height": 540,
+        "height": 600,
         "color": 6
       }
     }
@@ -1368,9 +1368,9 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "e4388f9d-4f68-4cda-bf73-a708d9a60e49",
-  "activeVersionId": "e4388f9d-4f68-4cda-bf73-a708d9a60e49",
-  "versionCounter": 4,
+  "versionId": "bebb77f2-5b0b-437b-8925-63782739b46f",
+  "activeVersionId": "bebb77f2-5b0b-437b-8925-63782739b46f",
+  "versionCounter": 6,
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],

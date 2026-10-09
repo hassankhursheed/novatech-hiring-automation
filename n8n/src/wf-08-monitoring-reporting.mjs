@@ -106,7 +106,7 @@ SELECT d.report_date::text AS report_date,
   w.add(email('Notify Reviewers (SWF-02)', {
     ctx: `${RV}.ctx`, template: 'staff.review_needed', entityType: 'APPLICATION',
     dedupe: `"review.queue:" + ${RV}.action.id`,
-    recipient: '$json.app.status === "INTERVIEW_REVIEW" ? ($json.hiring_manager_email || $json.recruiters) : $json.recruiters',
+    recipient: '$json.app.status === "INTERVIEW_REVIEW" ? [...new Set([$json.hiring_manager_email, ...String($json.recruiters || "").split(",")].filter(Boolean))].join(",") : $json.recruiters',
     subject: '"[Action needed] " + $json.app.application_code + " " + ($json.app.status === "INTERVIEW_REVIEW" ? "needs a hiring decision" : "needs a screening review")',
     html: `(() => { ${H} const a = $json.app; const n = v => v === null || v === undefined ? "-" : esc(v); const link = String($json.portal_url || "").replace(/\\/$/, "") + "/staff/applications/" + a.application_id; return layout("<p>An application needs a human decision.</p><table cellpadding='5' style='border-collapse:collapse'>" + [["Application", a.application_code], ["Candidate", a.candidate.full_name], ["Position", a.position.title], ["Status", a.status], ["Reason", a.review_reason], ["Screening score", a.application_score], ["AI recommendation (advisory)", a.ai_recommendation], ["Interview score", a.interview_score], ["Final score", a.final_score]].map(r => "<tr><td style='color:#667085'>" + r[0] + "</td><td><b>" + n(r[1]) + "</b></td></tr>").join("") + "</table><p><a href='" + esc(link) + "'>Open the application</a> to decide. Decisions are recorded with your name and reason.</p>", "Correlation id " + esc(a.correlation_id)); })()`,
     applicationId: '$json.app.application_id', entityId: '$json.app.application_id',

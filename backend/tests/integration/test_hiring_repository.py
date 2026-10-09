@@ -140,13 +140,13 @@ async def test_candidate_interview_offer_and_acceptance_through_the_repository(
 
     meeting = {"mode": "ONLINE", "meeting_url": "https://zoom.us/j/9988776655", "meeting_passcode": "nt2026"}
     assert (await repo.set_meeting(app_id, meeting, staff(SANA_HR)))["candidate_notified"] is False
-    hidden = await repo.interview_for_candidate(interview_id, candidate_id)
-    assert hidden["meeting_url"] is None and hidden["meeting_passcode"] is None  # not before the booking
 
     confirmed = await repo.confirm_slot(interview_id, str(view["slots"][0]["slot_id"]), candidate)
     assert confirmed["changed"] is True
-    shown = await repo.interview_for_candidate(interview_id, candidate_id)
-    assert shown["meeting_url"] == meeting["meeting_url"] and shown["meeting_passcode"] == "nt2026"
+    booked = await repo.interview_for_candidate(interview_id, candidate_id)
+    assert booked["status"] == "CONFIRMED" and booked["slots"] == []
+    private = {"scheduled_start", "meeting_url", "meeting_id", "meeting_passcode", "meeting_notes", "interviewer_name"}
+    assert not private & set(booked)  # time and meeting details only ever go by email
     assert (await repo.interview_for_staff(interview_id))["feedback_submitted"] is False
 
     feedback = {
