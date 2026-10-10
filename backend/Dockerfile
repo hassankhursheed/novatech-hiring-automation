@@ -54,4 +54,7 @@ EXPOSE 8000
 VOLUME ["/data/storage"]
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", \
-     "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header", "--timeout-graceful-shutdown", "20"]
+     "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header", "--timeout-graceful-shutdown", "20", \
+     "--timeout-worker-healthcheck", "30"]
+# The worker health check defaults to 5 s: on a busy machine a worker in the middle of an AI call (or still
+# starting) missed it, was killed and restarted in a loop, failing every request meanwhile.

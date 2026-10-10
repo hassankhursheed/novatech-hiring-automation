@@ -11,7 +11,8 @@ set -u
 grace=${TUNNEL_READY_GRACE_SECONDS:-120}
 step=10
 
-cloudflared tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url "$TUNNEL_ORIGIN" &
+# TUNNEL_PROTOCOL http2 (TCP) is steadier than quic (UDP) on connections that drop UDP traffic.
+cloudflared tunnel --no-autoupdate --metrics 0.0.0.0:2000 --protocol "${TUNNEL_PROTOCOL:-http2}" --url "$TUNNEL_ORIGIN" &
 pid=$!
 trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid"; exit 0' TERM INT
 

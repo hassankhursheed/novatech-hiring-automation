@@ -144,6 +144,8 @@ class LangChainStructuredLLM:
         chat = build_chat_model(settings)
         self._runnable = chat.with_structured_output(schema, method=settings.llm_structured_method, include_raw=True)
         self._pacer = pacer_for(settings.llm_requests_per_second)
+        # Loads the tracing client at startup rather than inside the first AI request, which kept a worker busy.
+        _langfuse_handler(settings)
 
     async def generate(self, system: str, user: str, *, session_id: str | None) -> LLMOutcome:
         handler = _langfuse_handler(self._settings)
