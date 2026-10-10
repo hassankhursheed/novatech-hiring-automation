@@ -15,6 +15,7 @@ docker compose exec -T n8n sh -c '
     const fs = require(\"fs\");
     for (const f of fs.readdirSync(\"/tmp/n8n-export\")) {
       const wf = JSON.parse(fs.readFileSync(\"/tmp/n8n-export/\" + f, \"utf8\"));
+      delete wf.shared; // the owning project is named after the n8n owner: their name and email address
       const slug = wf.name.toLowerCase().replace(/[^a-z0-9]+/g, \"-\").replace(/^-|-$/g, \"\");
       fs.writeFileSync(\"/home/node/workflows/\" + slug + \".json\", JSON.stringify(wf, null, 2) + \"\\n\");
       console.log(\"exported \" + slug + \".json\");

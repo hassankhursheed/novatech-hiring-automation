@@ -1176,26 +1176,6 @@
   "triggerCount": 0,
   "sourceWorkflowId": null,
   "tags": [],
-  "shared": [
-    {
-      "updatedAt": "2026-10-01T19:59:21.036Z",
-      "createdAt": "2026-10-01T19:59:21.036Z",
-      "role": "workflow:owner",
-      "workflowId": "aIsZuTp9Z6s1IqLi",
-      "projectId": "9f7VzNAeKbzdM0tQ",
-      "project": {
-        "updatedAt": "2026-10-01T19:04:09.368Z",
-        "createdAt": "2026-09-29T01:01:06.760Z",
-        "id": "9f7VzNAeKbzdM0tQ",
-        "name": "Hassan Khursheed <hassan@vitruviatech.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "cb0453d6-a9c0-405c-930c-161acc209a55"
-      }
-    }
-  ],
   "versionMetadata": {
     "name": null,
     "description": null
