@@ -29,6 +29,7 @@ services:
     restart: unless-stopped
     environment:
       TUNNEL_ORIGIN: http://edge:8080
+      TUNNEL_PROTOCOL: http2
       TUNNEL_READY_GRACE_SECONDS: "120"
     healthcheck:
       test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:2000/ready"]

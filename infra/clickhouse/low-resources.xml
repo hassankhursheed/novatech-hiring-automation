@@ -1,0 +1,18 @@
+<!-- Langfuse's ClickHouse (docker-compose.yml, profile "observability"), mounted into config.d.
+     ClickHouse's own diagnostic logs are not used by Langfuse. On a small machine, writing and merging them kept
+     the CPU busy all the time (1.9 GB of internal logs next to 1 MB of Langfuse data) and slowed n8n and the
+     backend down, so they are switched off. query_log stays for troubleshooting. -->
+<clickhouse>
+    <trace_log remove="1"/>
+    <text_log remove="1"/>
+    <metric_log remove="1"/>
+    <query_metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <latency_log remove="1"/>
+    <part_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <opentelemetry_span_log remove="1"/>
+    <query_thread_log remove="1"/>
+    <query_views_log remove="1"/>
+    <error_log remove="1"/>
+</clickhouse>
