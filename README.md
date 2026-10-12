@@ -42,6 +42,18 @@ powershell -ExecutionPolicy Bypass -File scripts\n8n-mistral-key.ps1
 docker compose --profile observability up -d
 ```
 
+**Minimum setup: use your own name and email.** The repository contains no personal identity; fill in your own:
+
+| Where | What to enter |
+|---|---|
+| Git (before your first commit) | `git config user.name "Your Name"` and `git config user.email "you@example.com"` (or your GitHub *noreply* address to keep your email private) |
+| n8n owner account (first visit to http://localhost:5678) | your name, email and a password; `scripts/n8n-export` strips this owner from exported workflows |
+| `.env` | `MAIL_FROM_ADDRESS` (the mailbox that sends email), `OPS_ALERT_EMAIL` (where error alerts go), `LANGFUSE_INIT_USER_EMAIL`, and on a server `ACME_EMAIL` |
+| `config/staff.csv` | copy `config/staff.example.csv` and enter your team's names and emails ([config/README.md](config/README.md)) |
+| n8n credential *NovaTech SMTP (outgoing email)* | your SMTP login, e.g. a Gmail address with an App password |
+
+`.env` and `config/staff.csv` are git-ignored, so these values stay on your machine.
+
 **Manual setup that stays with you** (details in [docs/n8n-setup.md](docs/n8n-setup.md)):
 * **Real email:** out of the box every email goes to the Mailpit test inbox. To reach candidates, edit the n8n
   credential *NovaTech SMTP (outgoing email)* (e.g. Gmail: `smtp.gmail.com`, port 465, SSL, an App password) and set
